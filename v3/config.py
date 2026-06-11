@@ -1,0 +1,22 @@
+"""
+统一配置中心
+所有模块从这里导入配置，避免重复定义
+"""
+import os
+from pathlib import Path
+from dotenv import load_dotenv
+
+load_dotenv(override=True)
+
+# ── 路径 ──────────────────────────────────────────────
+WORKDIR = Path.cwd()
+SKILLS_DIR = Path(os.environ.get("SKILLS_DIR", WORKDIR / "skill"))
+
+# ── 模型 ──────────────────────────────────────────────
+MODEL = os.environ["MODEL_ID"]
+MAX_TOKENS = int(os.environ.get("MAX_TOKENS", "8000"))
+SUB_MAX_TOKENS = int(os.environ.get("SUB_MAX_TOKENS", "4000"))
+SUB_MAX_TURNS = int(os.environ.get("SUB_MAX_TURNS", "30"))
+
+# ── 显示 ──────────────────────────────────────────────
+PROMPT_NAME = os.environ.get("PROMPT_NAME", "s03")

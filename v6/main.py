@@ -1,7 +1,7 @@
 """
-Agent v5版本
-在v4版本基础上增加了memory模块、动态system_prompt、错误恢复机制。
-至此 参考Claude的Agent设计的一个基础完整版本已经完成。
+Agent v6版本
+在v5版本基础上增加了任务系统模块（持久化任务图 + 后台异步执行）。
+整合 s12_task_system 与 s13_background_tasks 的核心功能。
 
 核心改动：
   system_prompt 动态组装 + 缓存
@@ -9,6 +9,11 @@ Agent v5版本
     Path 1: max_tokens → 升级 token 上限 → continuation prompt
     Path 2: prompt_too_long → 应急压缩 → 重试
     Path 3: 429/529 → 指数退避 + fallback 模型
+  任务系统：
+    - 文件持久化的任务依赖图（.tasks/ 目录，blockedBy DAG）
+    - 5 个任务工具：create_task / list_tasks / get_task / claim_task / complete_task
+    - 后台线程执行慢操作（run_in_background / is_slow_operation）
+    - <task_notification> 通知注入（不复用 tool_use_id）
 """
 import time
 
@@ -28,6 +33,9 @@ from log import log_event
 from skill import get_system_prompt, update_context
 from tools import TOOLS, TOOL_HANDLERS
 from subagent import spawn_subagent
+from task_system import (TASK_TOOLS, TASK_TOOL_HANDLERS,
+                         should_run_background, start_background_task,
+                         collect_background_results)
 
 from compact import tool_result_budget, snip_compact, micro_compact, compact_history, run_compact
 from memory import load_memories, extract_memories, consolidate_memories
@@ -39,6 +47,10 @@ from recovery import (RecoveryState, with_retry, is_prompt_too_long_error,
 TOOLS.append({"name": "spawn_subagent", "description": "Spawn a sub-agent to complete a subtask. Input is a text description of the subtask."})
 TOOL_HANDLERS["spawn_subagent"] = spawn_subagent
 TOOL_HANDLERS["compact"] = run_compact
+
+# ── 注册任务系统工具（s12: 持久化任务图 + s13: 后台执行）──
+TOOLS.extend(TASK_TOOLS)
+TOOL_HANDLERS.update(TASK_TOOL_HANDLERS)
 
 # ── 启动日志（统一由 log_event 输出）──
 log_event("STARTUP", "config",
@@ -175,7 +187,7 @@ def agent_loop(messages: list, context: dict):
                 continue
             return
 
-        # ── 处理工具调用 ──
+        # ── 处理工具调用（同步 + 后台分发）──
         results = []
         for block in response.content:
             if block.type != "tool_use":
@@ -191,13 +203,39 @@ def agent_loop(messages: list, context: dict):
             handler = TOOL_HANDLERS.get(block.name)
             if not handler:
                 log_event("ERROR", "no_handler", tool=block.name)
-            output = handler(block.input) if handler else f"No handler for tool {block.name}"
-            trigger_hook("PostToolUse", block, output)
+                results.append({"type": "tool_result",
+                                "tool_use_id": block.id,
+                                "content": f"No handler for tool {block.name}"})
+                continue
 
-            results.append({"type": "tool_result",
-                            "tool_use_id": block.id,
-                            "content": output})
-        messages.append({"role": "user", "content": results})
+            # ── 后台执行判断（s13）──
+            # 模型显式 run_in_background=true 或启发式匹配慢操作时，
+            # 分发到 daemon 线程，立即返回占位 tool_result。
+            if should_run_background(block.name, block.input):
+                bg_id = start_background_task(block, handler)
+                results.append({"type": "tool_result",
+                                "tool_use_id": block.id,
+                                "content": f"[Background task {bg_id} started] "
+                                           f"Command: {block.input.get('command', '')}. "
+                                           f"Result will be available when complete."})
+            else:
+                # 同步执行
+                output = handler(block.input)
+                trigger_hook("PostToolUse", block, output)
+                results.append({"type": "tool_result",
+                                "tool_use_id": block.id,
+                                "content": output})
+
+        # ── 收集后台完成通知 + 合并同步结果 ──
+        user_content = []
+        bg_notifications = collect_background_results()
+        if bg_notifications:
+            for notif in bg_notifications:
+                user_content.append({"type": "text", "text": notif})
+            log_event("BACKGROUND", "inject",
+                      count=len(bg_notifications))
+        user_content.extend(results)
+        messages.append({"role": "user", "content": user_content})
         log_event("ITERATION", "end", iteration=iteration, tool_results=len(results))
 
         # ── 刷新 context（工具可能改变了状态）──

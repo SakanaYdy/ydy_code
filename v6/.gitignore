@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+.env
+.tasks/
+memory/
+tool_result/
+transcripts/

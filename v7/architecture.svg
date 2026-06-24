@@ -1,0 +1,116 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 940 600">
+  <defs>
+    <marker id="a" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <polygon points="0 0, 8 3, 0 6" fill="#2980B9"/>
+    </marker>
+    <filter id="sh"><feDropShadow dx="1.5" dy="1.5" stdDeviation="2" flood-color="#00000012"/></filter>
+    <linearGradient id="hd"><stop offset="0%" stop-color="#2C3E50"/><stop offset="100%" stop-color="#34495E"/></linearGradient>
+    <linearGradient id="lead"><stop offset="0%" stop-color="#2980B9"/><stop offset="100%" stop-color="#1A5276"/></linearGradient>
+    <linearGradient id="team"><stop offset="0%" stop-color="#8E44AD"/><stop offset="100%" stop-color="#6C3483"/></linearGradient>
+  </defs>
+
+  <rect width="940" height="600" fill="#FFFFFF" rx="8"/>
+
+  <!-- Title -->
+  <rect x="0" y="0" width="940" height="42" fill="url(#hd)" rx="8"/>
+  <rect x="0" y="21" width="940" height="21" fill="url(#hd)"/>
+  <text x="470" y="27" text-anchor="middle" fill="#FFF" font-family="Arial" font-size="16" font-weight="bold">Agent v7 — 多Agent协作 (Lead + Teammate)</text>
+
+  <!-- ===== LEFT: Lead Agent ===== -->
+  <rect x="12" y="52" width="460" height="540" rx="6" fill="#EBF5FB" stroke="#85C1E9" stroke-width="1.5"/>
+  <rect x="12" y="52" width="460" height="24" rx="6" fill="url(#lead)"/>
+  <rect x="12" y="66" width="460" height="10" fill="url(#lead)"/>
+  <text x="242" y="69" text-anchor="middle" fill="#FFF" font-family="Arial" font-size="11" font-weight="bold">Lead Agent (main.py)</text>
+
+  <!-- agent_loop -->
+  <rect x="28" y="84" width="428" height="40" rx="5" fill="#D4E6F1" stroke="#5DADE2" filter="url(#sh)"/>
+  <text x="242" y="101" text-anchor="middle" fill="#1A5276" font-family="Arial" font-size="10" font-weight="bold">agent_loop</text>
+  <text x="242" y="116" text-anchor="middle" fill="#7F8C8D" font-family="Arial" font-size="8">记忆 → 压缩 → LLM → 工具调用</text>
+
+  <!-- Lead tools -->
+  <text x="28" y="142" fill="#1A5276" font-family="Arial" font-size="10" font-weight="bold">Lead工具 (6个):</text>
+  <rect x="28" y="150" width="428" height="50" rx="4" fill="#F8F9FA" stroke="#D5D8DC"/>
+  <rect x="38" y="156" width="98" height="18" rx="2" fill="#D4E6F1"/>
+  <text x="87" y="169" text-anchor="middle" fill="#1A5276" font-family="Arial" font-size="7">spawn_teammate</text>
+  <rect x="142" y="156" width="98" height="18" rx="2" fill="#D4E6F1"/>
+  <text x="191" y="169" text-anchor="middle" fill="#1A5276" font-family="Arial" font-size="7">send_message</text>
+  <rect x="246" y="156" width="98" height="18" rx="2" fill="#D4E6F1"/>
+  <text x="295" y="169" text-anchor="middle" fill="#1A5276" font-family="Arial" font-size="7">check_inbox</text>
+  <rect x="350" y="156" width="98" height="18" rx="2" fill="#D4E6F1"/>
+  <text x="399" y="169" text-anchor="middle" fill="#1A5276" font-family="Arial" font-size="7">request_shutdown</text>
+  <rect x="38" y="178" width="98" height="18" rx="2" fill="#D4E6F1"/>
+  <text x="87" y="191" text-anchor="middle" fill="#1A5276" font-family="Arial" font-size="7">request_plan</text>
+  <rect x="142" y="178" width="98" height="18" rx="2" fill="#D4E6F1"/>
+  <text x="191" y="191" text-anchor="middle" fill="#1A5276" font-family="Arial" font-size="7">review_plan</text>
+
+  <!-- consume_lead_inbox -->
+  <rect x="28" y="212" width="428" height="40" rx="5" fill="#F4ECF7" stroke="#AF7AC5" filter="url(#sh)"/>
+  <text x="242" y="229" text-anchor="middle" fill="#6C3483" font-family="Arial" font-size="10" font-weight="bold">每轮结束: consume_lead_inbox() — 协议路由</text>
+  <text x="242" y="244" text-anchor="middle" fill="#7F8C8D" font-family="Arial" font-size="8">读取消息 → 遍历 → *_response类型通过match_response更新状态 → 返回</text>
+
+  <!-- ===== RIGHT: Message Bus ===== -->
+  <rect x="490" y="52" width="438" height="180" rx="6" fill="#F8F9FA" stroke="#BDC3C7" stroke-width="1.5"/>
+  <text x="510" y="72" fill="#34495E" font-family="Arial" font-size="12" font-weight="bold">agent_teams.py — 消息总线 &amp; 协议状态机</text>
+
+  <!-- Message Bus -->
+  <rect x="505" y="84" width="408" height="65" rx="5" fill="#F4ECF7" stroke="#AF7AC5" filter="url(#sh)"/>
+  <text x="709" y="100" text-anchor="middle" fill="#6C3483" font-family="Arial" font-size="9" font-weight="bold">MessageBus — 文件邮箱系统</text>
+  <text x="515" y="116" fill="#2C3E50" font-family="Arial" font-size="8">.mailboxes/ 目录 → .jsonl 收件箱文件</text>
+  <text x="515" y="130" fill="#2C3E50" font-family="Arial" font-size="8">消费式读取: read_inbox() 后立即删除文件</text>
+  <text x="515" y="144" fill="#7F8C8D" font-family="Arial" font-size="7">选择文件而非内存队列: 持久性 + 可调试 + 简单性</text>
+
+  <!-- Protocol State -->
+  <rect x="505" y="158" width="408" height="65" rx="5" fill="#FDEBD0" stroke="#F0B27A" filter="url(#sh)"/>
+  <text x="709" y="174" text-anchor="middle" fill="#7E5109" font-family="Arial" font-size="9" font-weight="bold">ProtocolState — 结构化请求-响应</text>
+  <text x="515" y="190" fill="#2C3E50" font-family="Arial" font-size="8">request_id → 关联请求与响应 | status: pending→approved/rejected</text>
+  <text x="515" y="204" fill="#2C3E50" font-family="Arial" font-size="8">match_response() 带类型验证: "shutdown_response只能匹配shutdown请求"</text>
+  <text x="515" y="218" fill="#7F8C8D" font-family="Arial" font-size="7">防止"用shutdown_response误批plan_approval"的bug</text>
+
+  <!-- ===== PROTOCOL DIAGRAMS ===== -->
+  <rect x="490" y="245" width="438" height="200" rx="6" fill="#E8F8F5" stroke="#1ABC9C" stroke-width="1.5"/>
+  <text x="510" y="265" fill="#0E6655" font-family="Arial" font-size="11" font-weight="bold">两种协议</text>
+
+  <!-- Shutdown protocol -->
+  <text x="510" y="288" fill="#0E6655" font-family="Arial" font-size="9" font-weight="bold">Shutdown协议:</text>
+  <rect x="510" y="296" width="195" height="60" rx="4" fill="#EBF5FB"/>
+  <text x="607" y="312" text-anchor="middle" fill="#1A5276" font-family="Arial" font-size="8" font-weight="bold">Lead</text>
+  <text x="607" y="328" text-anchor="middle" fill="#2C3E50" font-family="Arial" font-size="7">request_shutdown →</text>
+  <text x="607" y="344" text-anchor="middle" fill="#2C3E50" font-family="Arial" font-size="7">← shutdown_response</text>
+
+  <rect x="715" y="296" width="195" height="60" rx="4" fill="#F4ECF7"/>
+  <text x="812" y="312" text-anchor="middle" fill="#6C3483" font-family="Arial" font-size="8" font-weight="bold">Teammate</text>
+  <text x="812" y="328" text-anchor="middle" fill="#2C3E50" font-family="Arial" font-size="7">dispatch → 确认</text>
+  <text x="812" y="344" text-anchor="middle" fill="#2C3E50" font-family="Arial" font-size="7">→ 退出循环</text>
+
+  <!-- Plan approval protocol -->
+  <text x="510" y="380" fill="#0E6655" font-family="Arial" font-size="9" font-weight="bold">Plan Approval协议:</text>
+  <rect x="510" y="388" width="195" height="48" rx="4" fill="#F4ECF7"/>
+  <text x="607" y="404" text-anchor="middle" fill="#6C3483" font-family="Arial" font-size="8" font-weight="bold">Teammate</text>
+  <text x="607" y="420" text-anchor="middle" fill="#2C3E50" font-family="Arial" font-size="7">submit_plan → BUS.send("plan_approval_request")</text>
+
+  <rect x="715" y="388" width="195" height="48" rx="4" fill="#EBF5FB"/>
+  <text x="812" y="404" text-anchor="middle" fill="#1A5276" font-family="Arial" font-size="8" font-weight="bold">Lead</text>
+  <text x="812" y="420" text-anchor="middle" fill="#2C3E50" font-family="Arial" font-size="7">review_plan(req_id, approve) → response</text>
+
+  <!-- ===== RIGHT: Teammate ===== -->
+  <rect x="490" y="458" width="438" height="134" rx="6" fill="#F4ECF7" stroke="#AF7AC5" stroke-width="1.5"/>
+  <rect x="490" y="458" width="438" height="24" rx="6" fill="url(#team)"/>
+  <rect x="490" y="472" width="438" height="10" fill="url(#team)"/>
+  <text x="709" y="475" text-anchor="middle" fill="#FFF" font-family="Arial" font-size="11" font-weight="bold">Teammate Thread — Idle Loop</text>
+
+  <rect x="505" y="486" width="408" height="96" rx="4" fill="#F8F9FA" stroke="#D5D8DC"/>
+  <text x="510" y="502" fill="#6C3483" font-family="Arial" font-size="9" font-weight="bold">while not shutdown:</text>
+  <text x="515" y="518" fill="#2C3E50" font-family="Arial" font-size="8">① 收件箱检查 → 协议消息分发</text>
+  <text x="515" y="534" fill="#2C3E50" font-family="Arial" font-size="8">② LLM调用 → 工具执行</text>
+  <text x="515" y="550" fill="#2C3E50" font-family="Arial" font-size="8">③ if stop_reason != tool_use: idle loop (等待收件箱消息)</text>
+  <text x="515" y="566" fill="#7F8C8D" font-family="Arial" font-size="7">shutdown_request → 确认退出 | 新消息 → 注入恢复LLM | 普通消息 → 注入</text>
+  <text x="515" y="578" fill="#7F8C8D" font-family="Arial" font-size="7">④ 发送最终摘要给Lead</text>
+
+  <!-- Arrow connecting Lead and Teammate via MessageBus -->
+  <rect x="28" y="268" width="440" height="24" rx="4" fill="#D5F5E3" stroke="#82E0AA"/>
+  <text x="248" y="285" text-anchor="middle" fill="#1E8449" font-family="Arial" font-size="9">⇅ 通过 MessageBus (.mailboxes/*.jsonl) 通信</text>
+
+  <!-- v7 info -->
+  <rect x="28" y="540" width="440" height="20" rx="3" fill="#E8DAEF"/>
+  <text x="248" y="554" text-anchor="middle" fill="#6C3483" font-family="Arial" font-size="8">v6→v7: 工具 12→18 (+6团队工具) | 模块 12→13 | 并行Teammate + 协议状态机</text>
+</svg>

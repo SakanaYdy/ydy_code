@@ -1,593 +1,243 @@
-# Agent v6 技术文档
+# Agent v6 — 任务系统 + 后台执行
 
-## 1. 项目概述
+## 1. 概述
 
-Agent v6 是一个基于 Anthropic SDK 构建的 Python 编码智能体，使用 DeepSeek 作为 LLM 后端。v6 在 v5 基础上新增了**任务系统模块**（持久化任务图 + 后台异步执行），整合了 s12_task_system 与 s13_background_tasks 的核心功能。
+v6 新增**持久化任务依赖图**和**后台异步执行**。任务系统解决了"多步骤项目的顺序约束"问题——你不能先盖屋顶再打地基。后台执行解决了"慢操作阻塞主循环"问题——你不需要站在洗衣机前等 30 分钟。
 
-### 1.1 技术栈
+这两个子系统分别关注**任务编排**和**执行效率**，是 Agent 从"单轮对话工具"向"项目管理助手"演进的关键步骤。
 
-| 组件 | 技术 |
-|---|---|
-| LLM SDK | `anthropic` (Python) |
-| 后端模型 | DeepSeek v4 Flash (通过 Anthropic 兼容 API) |
-| 配置管理 | `python-dotenv` + `.env` |
-| Python 版本 | 3.11+ |
+### 1.1 有向无环图的本质含义
 
-### 1.2 快速启动
+v6 的 Task DAG 不是"高级数据结构的应用"，而是**将 Agent 的推理认知外化为显式约束**。
 
-```bash
-# 1. 安装依赖
-pip install anthropic python-dotenv
+在 v6 之前，如果用户说"帮我做一个登录功能"，Agent 需要**在推理过程中自行维护**"先建数据库、再写API、最后做UI"的顺序。这个顺序存在于 LLM 的推理链中，而不是系统的任何数据结构中。一旦 LLM 的注意力转移（比如被迫压缩上下文），这个顺序就会丢失。
 
-# 2. 配置 .env（见下方配置说明）
+DAG 将顺序约束从 LLM 的推理中**提取到系统层面**。`blockedBy: ["task_001", "task_002"]` 是一个显式约束——不管 LLM 是否记得，系统都会阻止 task_003 在依赖完成前被认领。
 
-# 3. 运行
-python main.py
+**DAG vs 线性列表的本质区别**：
+
+```
+线性列表: [建数据库, 写API, 做UI]
+  问题: 写API和做UI没有依赖关系，但列表暗示了顺序
+
+DAG:
+  建数据库 → 写API
+           → 做UI
+  表述: 写API和做UI都可以在建数据库完成后开始
 ```
 
----
+DAG 揭示了**并行机会**——而线性列表隐藏了并行机会。当多个 Agent 协同工作时（v7/v8），DAG 中的并行分支可以被分配给不同的 Agent 同时执行。
 
-## 2. 文件结构
+### 1.2 后台执行与异步通知的架构含义
+
+v6 的后台执行引入了一个深层的架构变化：**Agent 的工具调用从"同步阻塞"变成了"异步非阻塞"**。这改变了 Agent 的行为模式：
+
+**同步模式**（v1-v5）：
+```
+LLM调用 → 判断tool_use → 执行工具(等待...) → 获取结果 → 下一轮LLM
+Agent 在等待工具执行时完全停滞
+```
+
+**异步模式**（v6）：
+```
+LLM调用 → 判断tool_use → 启动后台线程 → 立即返回占位结果 → 继续下一轮LLM
+Agent 不等待工具完成，继续处理其他任务
+(稍后) → 后台完成 → <task_notification>注入 → LLM得知结果
+```
+
+这种变化的核心是**解耦了"发起操作"和"获取结果"的时间点**。Agent 不需要"盯着水壶等水开"，而是在水烧开后通过通知得知。
+
+## 2. 系统架构
+
+![v6 系统架构图](architecture.svg)
+
+*主循环通过 should_run_background() 判断慢操作，后台daemon线程执行不阻塞主流程。任务系统以 DAG 管理顺序约束，自动解锁下游任务。*
+
+## 3. 文件结构
 
 ```
 v6/
-├── .env                  # 环境变量配置（API Key、模型、参数）
-├── .gitignore
-├── config.py             # 统一配置中心，从 .env 加载所有配置
-├── llm.py                # Anthropic 客户端单例
-├── log.py                # 统一日志模块（log_event）
-├── hook.py               # Hook 生命周期系统（权限、日志、控制流）
-├── tools.py              # 工具定义与 handler（bash/read/write/edit/glob）
-├── skill.py              # 技能加载与注册（从 skill/ 目录扫描 SKILL.md）
-├── subagent.py           # 子 Agent 模块（任务派发，不支持嵌套）
-├── compact.py            # 上下文压缩管线（4 级压缩策略）
-├── memory.py             # 跨会话持久记忆（存储、检索、提取、合并）
-├── recovery.py           # 错误恢复（3 条路径 + 指数退避）
-├── task_system.py        # 任务系统（持久化 DAG + 后台异步执行）
-├── main.py               # 入口，Agent 主循环
-├── .tasks/               # 运行时：任务 JSON 文件存储（自动创建）
-├── memory/               # 运行时：持久记忆存储
-├── tool_result/          # 运行时：大结果落盘
-├── transcripts/          # 运行时：LLM 压缩的完整对话记录
-└── skill/                # 技能定义目录
-    ├── code_review/SKILL.md
-    ├── data_analysis/SKILL.md
-    ├── debug_helper/SKILL.md
-    └── translate/SKILL.md
+├── config.py        # 统一配置中心
+├── llm.py           # Anthropic 客户端单例
+├── log.py           # 统一日志
+├── main.py          # 入口：agent_loop + 后台分发
+├── tools.py         # 5 个核心工具
+├── hook.py          # Hook 系统
+├── skill.py         # 技能加载 + 动态 prompt
+├── subagent.py      # 子 Agent
+├── compact.py       # 上下文压缩管线
+├── memory.py        # 持久记忆
+├── recovery.py      # 错误恢复
+└── task_system.py   # 任务系统 + 后台执行 ← 新增
 ```
 
-### 2.1 模块依赖关系
+## 4. 任务系统
 
-```
-main.py  （入口，Agent 主循环）
-  ├── config.py      （统一配置中心）
-  ├── llm.py         （Anthropic 客户端单例）
-  ├── log.py         （统一日志，无依赖）
-  ├── hook.py        （Hook 系统 ← config, log）
-  ├── skill.py       （技能加载 ← config, log）
-  ├── tools.py       （工具函数 ← config）
-  ├── subagent.py    （子 Agent ← config, llm, hook, log）
-  ├── compact.py     （压缩管线 ← log, llm）
-  ├── memory.py      （持久记忆 ← config, llm, log）
-  ├── recovery.py    （错误恢复 ← compact, log）
-  └── task_system.py （任务系统 ← config, log）
-```
+### 4.1 设计理论
 
-循环依赖处理：
-- `subagent.py` 通过延迟导入 `from tools import TOOL_HANDLERS` 避免 `tools → subagent → tools` 循环。
-- `task_system.py` 仅依赖 `config` 和 `log`，无循环风险。
+任务系统的设计动机是**管理多步骤项目的顺序约束**。TodoWrite（内存清单）只有"做什么"，没有"先做什么后做什么"。任务系统通过 `blockedBy` 依赖关系形成**有向无环图**（DAG），确保任务按正确顺序执行。
 
----
+**DAG 作为"推理外化"的架构意义**：在 v6 之前，Agent 在推理过程中自行维护"先建数据库、再写 API、最后做 UI"的依赖顺序。这个顺序存在于 LLM 的潜在推理链中，不在系统的任何数据结构中。一旦 LLM 被迫压缩上下文（v4 的管线），这个隐式顺序就丢失了——Agent 可能"忘记"某个任务依赖于另一个任务的完成。
 
-## 3. 配置说明
+DAG 将依赖关系**从 LLM 的推理中提取到系统层面**。`blockedBy: ["task_001", "task_002"]` 是一个显式的、不可丢失的约束。不管 LLM 的记忆被压缩了多少次，系统都会阻止 task_003 在依赖完成前被认领。这是从"依赖推理"到"依赖保证"的质变。
 
-所有配置通过 `.env` 文件管理，由 `config.py` 统一加载。
+**DAG 揭示的并行机会**：线性任务列表（[建数据库, 写 API, 做 UI]）隐藏了并行可能——写 API 和做 UI 都依赖建数据库，但彼此不依赖。DAG 的结构使得 `can_start()` 可以并行检查多个任务——建数据库完成后，写 API 和做 UI 同时变为"可开始"状态。当 v7/v8 引入多 Agent 协作时，这两个并行的任务可以被分配给不同的 Teammate 同时执行。
 
-| 变量名 | 必填 | 默认值 | 说明 |
-|---|---|---|---|
-| `ANTHROPIC_BASE_URL` | 否 | (官方 API) | API 端点，DeepSeek 使用 `https://api.deepseek.com/anthropic` |
-| `ANTHROPIC_AUTH_TOKEN` | 是 | — | API Key |
-| `MODEL_ID` | 是 | — | 模型 ID，如 `deepseek-v4-flash` |
-| `MAX_TOKENS` | 否 | `8000` | 主 Agent 单次最大输出 token |
-| `SUB_MAX_TOKENS` | 否 | `4000` | 子 Agent 单次最大输出 token |
-| `SUB_MAX_TURNS` | 否 | `30` | 子 Agent 最大循环轮次 |
-| `PROMPT_NAME` | 否 | `s03` | REPL 提示符显示名称 |
-| `SKILLS_DIR` | 否 | `./skill` | 技能目录路径 |
+**`can_start()` 的保守设计**：`can_start()` 将所有 `blockedBy` 依赖的 `completed` 状态作为必要条件。这比"检查是否有任何依赖是 pending 或 in_progress"更严格——如果某个依赖任务是"缺失的"（在 blockedBy 中提到但不在 .tasks/ 中），`can_start()` 返回 False。这个保守设计防止了"引用了不存在的任务"导致的静默错误。在分布式系统中，保守的依赖检查比宽松的检查更安全。
 
----
+**Claude Code 的任务管理对比**：真实的 Claude Code 使用 TaskCreate/TaskUpdate/TaskList 等工具管理任务。v6 复现的是这个任务模型的核心——DAG 依赖、状态机流转、文件持久化。但 Claude Code 的任务系统更丰富——支持任务优先级、deadline、跨 workspace 的任务依赖、以及任务模板（常见任务模式的预设）。
 
-## 4. 核心架构
+### 4.2 任务数据结构
 
-### 4.1 Agent 主循环 (`agent_loop`)
-
-```
-用户输入
-  │
-  ▼
-┌──────────────────────────────────────────────────┐
-│  agent_loop(messages)                            │
-│  ┌────────────────────────────────────────────┐  │
-│  │ 1. 上下文压缩预处理（0 API 调用）           │  │
-│  │    tool_result_budget → snip → micro        │  │
-│  │ 2. LLM 摘要压缩（条件触发，1 API 调用）     │  │
-│  │ 3. 调用 LLM API                            │  │
-│  │ 4. 判断 stop_reason                         │  │
-│  │    ├─ tool_use → 执行工具 → 回到 1          │  │
-│  │    └─ end_turn → 触发 Stop hook → 返回      │  │
-│  └────────────────────────────────────────────┘  │
-└──────────────────────────────────────────────────┘
-  │
-  ▼
-输出结果
-```
-
-**关键设计：**
-- 循环直到 LLM 不再请求工具调用才退出
-- 每轮迭代自动执行上下文压缩，防止 token 超限
-- `Stop` hook 可以强制继续循环（返回值注入为 user message）
-
-### 4.2 工具调用流程
-
-```
-LLM 返回 tool_use block
-  │
-  ▼
-trigger_hook("PreToolUse", block)
-  ├─ 自动派发 OnToolStart → 日志记录
-  ├─ permission_hook → 权限检查（可阻断）
-  │
-  ├─ 被阻断 → 返回错误信息作为 tool_result
-  │
-  └─ 通过 → 执行 handler(block.input)
-       │
-       ▼
-     trigger_hook("PostToolUse", block, output)
-       ├─ 自动派发 OnToolEnd → 日志记录（含耗时）
-       └─ large_output_hook → 大输出警告
-```
-
-### 4.3 工具列表
-
-| 工具名 | Handler | 功能 |
-|---|---|---|
-| `bash` | `run_bash()` | 执行 shell 命令（120s 超时，支持 `run_in_background`） |
-| `read_file` | `run_read()` | 读取文件内容，支持行数限制 |
-| `write_file` | `run_write()` | 写入文件（自动创建父目录） |
-| `edit_file` | `run_edit()` | 精确文本替换（单次） |
-| `glob` | `run_glob()` | 按模式搜索文件 |
-| `compact` | `run_compact()` | 手动触发上下文压缩 |
-| `spawn_subagent` | `spawn_subagent()` | 派发子 Agent 执行子任务 |
-| `create_task` | `_run_create_task()` | 创建任务（可指定 blockedBy 依赖） |
-| `list_tasks` | `_run_list_tasks()` | 列出所有任务及状态 |
-| `get_task` | `_run_get_task()` | 获取任务详情 |
-| `claim_task` | `_run_claim_task()` | 认领任务（pending → in_progress） |
-| `complete_task` | `_run_complete_task()` | 完成任务（in_progress → completed） |
-
----
-
-## 5. Hook 生命周期系统
-
-Hook 系统是 v4 的核心扩展机制，所有权限检查、日志记录、行为控制都通过 Hook 实现。
-
-### 5.1 Hook 类型
-
-| Hook 名称 | 触发时机 | 返回值语义 |
-|---|---|---|
-| `UserPromptSubmit` | 用户输入进入 LLM 前 | 忽略（纯观察） |
-| `PreToolUse` | 工具执行前 | 非 None → **阻断工具**，返回值成为 tool_result |
-| `PostToolUse` | 工具执行后 | 忽略（纯观察） |
-| `Stop` | Agent 主循环即将退出 | 非 None → **强制继续**，返回值注入为 user message |
-| `OnToolStart` | 工具执行前（自动派发） | 忽略（日志专用） |
-| `OnToolEnd` | 工具执行后（自动派发） | 忽略（日志专用） |
-
-### 5.2 已注册的 Hook
-
-| 函数 | Hook 点 | 职责 |
-|---|---|---|
-| `permission_hook` | `PreToolUse` | 阻断危险 bash 命令（deny list）；交互确认破坏性命令；阻止工作区外写入 |
-| `large_output_hook` | `PostToolUse` | 输出超过 100K 字符时警告 |
-| `context_inject_hook` | `UserPromptSubmit` | 记录工作目录 |
-| `summary_hook` | `Stop` | 打印会话工具调用总数 |
-| `tool_start_hook` | `OnToolStart` | 自动记录工具名称、ID、参数预览 |
-| `tool_end_hook` | `OnToolEnd` | 自动记录工具耗时、输出大小 |
-
-### 5.3 自动派发机制
-
-`trigger_hook()` 函数内部自动处理 `OnToolStart` / `OnToolEnd` 的派发：
-
-```python
-def trigger_hook(hook_name, *args, **kwargs):
-    # PreToolUse → 自动派发 OnToolStart，记录开始时间
-    # 执行控制流 hook handlers
-    # PostToolUse → 自动派发 OnToolEnd，计算耗时
-```
-
-业务代码只需调用 `trigger_hook("PreToolUse", block)` 和 `trigger_hook("PostToolUse", block, output)`，日志自动输出。
-
-### 5.4 扩展 Hook
-
-```python
-# 在 hook.py 中定义函数
-def my_custom_hook(block):
-    """PreToolUse: 自定义逻辑"""
-    if block.name == "bash" and "git push" in block.input.get("command", ""):
-        log_event("CUSTOM", "git_push", cmd=block.input["command"])
-    return None
-
-# 注册
-register_hook("PreToolUse", my_custom_hook)
-```
-
----
-
-## 6. 统一日志系统
-
-### 6.1 设计原则
-
-- **单一输出点**：所有日志通过 `log_event()` 函数输出，底层唯一调用 `print()`
-- **Hook 自动触发**：工具调用的 start/end 日志由 `trigger_hook()` 内部自动派发
-- **业务代码零侵入**：工具函数（`tools.py`）纯业务逻辑，不含任何日志语句
-
-### 6.2 `log_event()` 接口
-
-```python
-log_event(category: str, event: str, **data)
-```
-
-**输出格式：** `[CATEGORY] event: key=value, key=value`
-
-**示例：**
-```
-[TOOL] start: name=bash, id=toolu_01abc, args=['ls -la']
-[TOOL] end: name=bash, elapsed=0.23s, output=1234 chars, rc=(ok)
-[API] response: elapsed=2.15s, stop_reason=tool_use, text_blocks=1, tool_blocks=2, input_tokens=1500, output_tokens=300
-[COMPACT] snip: before=30, after=20, head=10, tail=10
-[SUBAGENT] spawn: task=Read and analyze config.py, model=deepseek-v4-flash, max_turns=30
-[SESSION] round_start: round=1, input=帮我看看这个项目的结构
-```
-
-### 6.3 颜色方案
-
-| 颜色 | ANSI 码 | 用途 |
-|---|---|---|
-| 灰色 | `\033[90m` | 普通信息（工具、API、压缩、迭代） |
-| 黄色 | `\033[33m` | 警告（大输出、破坏性命令、应急压缩） |
-| 红色 | `\033[31m` | 错误（权限阻断、超时、异常） |
-| 洋红 | `\033[35m` | 子 Agent 事件 |
-| 青色 | `\033[36m` | 用户交互（会话事件） |
-
-### 6.4 日志事件分类
-
-| Category | Event | 触发位置 | 说明 |
-|---|---|---|---|
-| `STARTUP` | `config` | main.py | 配置信息 |
-| `STARTUP` | `llm` | main.py | LLM 客户端信息 |
-| `STARTUP` | `tools` | main.py | 工具注册列表 |
-| `STARTUP` | `system_prompt` | main.py | 系统提示词长度 |
-| `ITERATION` | `start` | main.py | 迭代开始（轮次、消息数） |
-| `ITERATION` | `end` | main.py | 迭代结束（工具结果数） |
-| `API` | `response` | main.py | API 响应详情（耗时、token、blocks） |
-| `TOOL` | `start` | hook.py (自动) | 工具开始执行 |
-| `TOOL` | `end` | hook.py (自动) | 工具执行完成（含耗时） |
-| `TOOL` | `warning` | hook.py | 大输出警告 |
-| `TOOL_BLOCKED` | `blocked` | hook.py | 权限阻断 |
-| `TOOL_BLOCKED` | `warning` | hook.py | 破坏性命令警告 |
-| `COMPACT` | `budget` | compact.py | 大结果落盘 |
-| `COMPACT` | `snip` | compact.py | 消息裁剪 |
-| `COMPACT` | `micro` | compact.py | 旧结果压缩 |
-| `COMPACT` | `llm_summary` | compact.py | LLM 摘要压缩 |
-| `COMPACT` | `emergency` | compact.py | 应急压缩 |
-| `SUBAGENT` | `spawn` | subagent.py | 子 Agent 创建 |
-| `SUBAGENT` | `turn` | subagent.py | 子 Agent 轮次 |
-| `SUBAGENT` | `api_response` | subagent.py | 子 Agent API 响应 |
-| `SUBAGENT` | `finished` | subagent.py | 子 Agent 完成 |
-| `SUBAGENT` | `done` | subagent.py | 子 Agent 总结（耗时、工具数） |
-| `SKILL` | `scan_start` | skill.py | 技能扫描开始 |
-| `SKILL` | `loaded` | skill.py | 技能加载成功 |
-| `SKILL` | `skipped` | skill.py | 技能跳过（无 SKILL.md） |
-| `SKILL` | `build_system` | skill.py | 系统提示词构建 |
-| `SESSION` | `round_start` | main.py | 对话轮次开始 |
-| `SESSION` | `prompt` | hook.py | 用户输入 |
-| `SESSION` | `agent_finished` | main.py | Agent 准备结束 |
-| `SESSION` | `force_continue` | main.py | Stop hook 强制继续 |
-| `SESSION` | `stop` | hook.py | 会话结束（工具调用统计） |
-| `SESSION` | `end` | main.py | 会话退出 |
-| `ERROR` | `no_handler` | main.py | 工具无 handler |
-| `TASK` | `create` | task_system.py | 创建任务（ID、subject、blockedBy） |
-| `TASK` | `claim` | task_system.py | 认领任务（owner） |
-| `TASK` | `complete` | task_system.py | 完成任务（解锁下游） |
-| `BACKGROUND` | `dispatched` | task_system.py | 后台任务分发（bg_id、command） |
-| `BACKGROUND` | `completed` | task_system.py | 后台任务完成（输出大小） |
-| `BACKGROUND` | `inject` | main.py | 注入后台完成通知（数量） |
-
----
-
-## 7. 上下文压缩管线
-
-当对话历史增长到接近 token 上限时，压缩管线自动运行，确保 API 调用不会因上下文过长而失败。
-
-### 7.1 四级压缩策略
-
-按顺序执行，每级都有独立的压缩逻辑：
-
-```
-Level 3 (L3) — tool_result_budget
-  │  将超过 2048 字符的工具结果写入 ./tool_results/，消息中保留截断版本 + 文件路径
-  │
-  ▼
-Level 1 (L1) — snip_compact
-  │  消息数超过 20 时，保留前 10 + 后 10，丢弃中间
-  │
-  ▼
-Level 2 (L2) — micro_compact
-  │  工具结果超过 5 个时，将旧的替换为 "[工具结果被压缩]"，保留最新 5 个
-  │
-  ▼
-Level 0 (LLM) — compact_history
-     当序列化后的消息总长度超过 CONTEXT_LIMIT (50000 字符) 时触发
-     使用 1 次 LLM 调用生成对话摘要，替换整个历史
-     完整记录写入 ./transcripts/
-```
-
-### 7.2 应急压缩 (`emergency_compact`)
-
-当 API 调用失败（如上下文溢出）时的兜底策略：
-- 使用 LLM 生成摘要
-- 保留最近 5 条原始消息 + 摘要
-- 确保下一次 API 调用能成功
-
-### 7.3 压缩工具
-
-用户或 LLM 可通过 `compact` 工具手动触发压缩：
-```json
-{"name": "compact", "input": {"focus": "optional focus area"}}
-```
-
----
-
-## 8. 子 Agent 系统
-
-### 8.1 设计
-
-子 Agent 是独立的 Agent 循环，用于执行主 Agent 分配的子任务：
-
-- **独立系统提示**：简化版，明确禁止嵌套派发
-- **受限工具集**：bash、read_file、write_file、edit_file、glob（不含 spawn_subagent）
-- **独立限制**：`SUB_MAX_TURNS` (30)、`SUB_MAX_TOKENS` (4000)
-- **共享 Hook**：PreToolUse / PostToolUse hooks 对子 Agent 同样生效
-
-### 8.2 调用方式
-
-主 Agent 通过 `spawn_subagent` 工具派发任务：
-```json
-{"name": "spawn_subagent", "input": {"description": "Read config.py and summarize its contents"}}
-```
-
-### 8.3 执行流程
-
-```
-主 Agent 调用 spawn_subagent(description)
-  │
-  ▼
-创建子 Agent 消息列表 [user: description]
-  │
-  ▼
-┌─────────────────────────────────────────┐
-│ 子 Agent 循环（最多 SUB_MAX_TURNS 轮） │
-│  1. 调用 LLM API                       │
-│  2. stop_reason != tool_use → 结束      │
-│  3. 执行工具调用（通过 hook 系统）       │
-│  4. 回到 1                              │
-└─────────────────────────────────────────┘
-  │
-  ▼
-提取最终文本结果，返回给主 Agent
-```
-
-### 8.4 结果提取策略
-
-1. 从最后一条消息提取文本
-2. 如果为空，从最后一条 assistant 消息提取
-3. 如果仍然为空，返回默认错误信息
-
----
-
-## 9. 技能系统
-
-### 9.1 技能定义
-
-每个技能是 `skill/` 目录下的子文件夹，包含 `SKILL.md` 文件：
-
-```
-skill/
-└── code_review/
-    └── SKILL.md    # YAML frontmatter + 技能正文
-```
-
-SKILL.md 格式：
-```markdown
----
-name: code_review
-description: 对代码进行多维度审查
----
-
-# 技能正文（Markdown 格式）
-...
-```
-
-### 9.2 已有技能
-
-| 技能 | 功能 |
-|---|---|
-| `code_review` | 多维度代码审查（结构、风格、缺陷、安全、性能） |
-| `data_analysis` | 数据分析与可视化建议（支持 CSV/JSON/Excel） |
-| `debug_helper` | 调试辅助（错误分析、根因定位、修复建议） |
-| `translate` | 智能翻译（上下文感知、术语表支持） |
-
-### 9.3 技能加载流程
-
-1. `_scan_skills()` 扫描 `SKILLS_DIR` 下所有子目录
-2. 解析每个 `SKILL.md` 的 YAML frontmatter（name、description）
-3. 注册到全局 `SKILL_REGISTRY` 字典
-4. `build_system()` 将技能目录注入系统提示词
-
----
-
-## 10. 任务系统
-
-任务系统整合了 s12（持久化任务图）和 s13（后台异步执行）的功能，是 v6 的核心新增模块。
-
-### 10.1 持久化任务图（DAG）
-
-**核心问题：** 多步骤项目需要尊重顺序约束（先建数据库，再写 API，最后加测试）。TodoWrite 是内存清单，无依赖跟踪，无跨会话持久化。任务系统解决这两个问题。
-
-**Task 数据结构：**
+`Task` dataclass 是任务系统的数据核心。每个字段的选择都对应任务管理的一个维度：
 
 ```python
 @dataclass
 class Task:
-    id: str             # task_{timestamp}_{random}
-    subject: str        # 任务标题
-    description: str    # 详细描述
-    status: str         # pending | in_progress | completed
-    owner: str | None   # Agent 名称（多 Agent 协作）
-    blockedBy: list[str] # 依赖的任务 ID
+    id: str            # 唯一标识，格式"task_{timestamp}_{random}"
+    subject: str       # 简短标题，给人类和LLM快速判断任务内容
+    description: str   # 详细描述，给LLM理解任务的完整上下文
+    status: str        # 状态机核心：pending/in_progress/completed
+    owner: str | None  # Agent名称，v7/v8多Agent时使用
+    blockedBy: list    # 依赖任务ID列表，形成DAG
 ```
 
-**文件持久化：** 每个任务存储为 `.tasks/{id}.json`。Agent 重启后读取 `.tasks/` 目录恢复进度。
+**`id` 的生成规则**：`task_{timestamp}_{random}` 格式确保唯一性——时间戳保证时间序，随机数防止同一时间戳的冲突。为什么不直接用 UUID？因为时间戳提供了"创建时间"信息，方便调试和运维中判断任务年龄。
 
-**状态机：** 两个动作驱动三个状态：
+**`subject` vs `description` 的分离**：subject 是给"快速浏览"用的（列出任务列表时），description 是给"深入理解"用的（认领任务后阅读）。这模拟了看板系统——卡片标题一眼可见，展开看详情。LLM 在 `list_tasks` 时能快速了解所有任务，在 `get_task` 时获得完整上下文。
+
+**`owner` 的 None 默认值**：owner 为 None 表示"未认领"。v6 中 owner 是主 Agent 的名称，v7 中是 Teammate 的名称，v8 中由自主 Agent 的 `claim_task` 设置。owner 字段从可选（v6）到必需（v7/v8）的演变反映了从单 Agent 到多 Agent 的架构进化。
+
+### 4.3 状态机
+
+状态机的流转规则编码了任务管理的约束：
+
 ```
-pending ──claim──> in_progress ──complete──> completed
-```
-
-**依赖检查：** `can_start(task_id)` 遍历 `blockedBy`，所有依赖必须为 `completed` 状态。
-
-### 10.2 后台异步执行
-
-**核心问题：** 某些 bash 命令耗时数分钟（如 `pip install torch`、`npm run build`）。同步等待浪费时间和 token。
-
-**执行决策（两级）：**
-1. **模型显式请求：** `run_in_background: true`（优先）
-2. **启发式 fallback：** `is_slow_operation()` 匹配关键词（install、build、test、deploy、compile、docker build、pytest、make）
-
-**生命周期：**
-```
-LLM 调用 bash "npm install" (run_in_background=true)
-  → start_background_task() 分发到 daemon 线程
-  → 立即返回占位 tool_result: "[Background task bg_0001 started]"
-  → LLM 继续执行其他任务（如 read_file）
-
-后台线程完成
-  → collect_background_results() 收集输出
-  → 注入 <task_notification> 到下一轮 user message
-  → LLM 看到通知，继续处理
+pending ──claim──→ in_progress ──complete──→ completed
 ```
 
-**通知格式：** 使用独立的 `<task_notification>` XML，不复用原始 `tool_use_id`（遵守 Messages API 规则：一个 `tool_use` 对应一个 `tool_result`）。
+**`claim` 的前置条件（两层检查）**：
+1. 任务状态必须是 `pending`——不能认领已完成或在执行中的任务
+2. 所有 `blockedBy` 依赖必须是 `completed`——`can_start()` 验证
 
-### 10.3 TodoWrite vs Task System
+如果 `blockedBy` 中有"不存在的任务ID"（其他任务引用的依赖从未被创建），`can_start()` 返回 False。这是防御性设计——不假设数据完整性，对任何缺失都采取保守策略。
 
-| 方面 | TodoWrite（内存清单） | Task System（持久化 DAG） |
+**`complete` 的后置动作**：完成后自动扫描所有 `pending` 任务，对每个任务调用 `can_start()`。所有"现在可以开始了"的任务被标记为"已解锁"，通知给 Agent。这个自动解锁机制是 DAG 的核心价值——手动解锁在任务多时极易遗漏。
+
+**状态机的不完整之处**：v6 没有 `failed` 状态。如果任务执行失败，它只能停留在 `in_progress` 或 force-complete。这在实际使用中会导致"看起来在做但永远做不完"的任务阻塞下游。v8 没有解决这个问题——真实 Claude Code 的任务状态更丰富（包括 cancelled、failed、skipped）。
+
+### 4.4 文件持久化
+
+每个任务序列化为 `.tasks/{id}.json` 文件存储。选择 JSON 格式而非 pickle 或数据库是因为：
+- JSON 人类可读——可以直接打开文件查看任务状态
+- JSON 跨语言——如果将来用其他语言实现工具（如 TypeScript 的 IDE 插件），可以直接读取
+- 文件系统是无依赖的数据库——不需要安装和维护任何数据库软件
+
+**跨会话恢复**：Agent 重启后读取 `.tasks/` 目录，将所有 JSON 文件反序列化为 Task 对象。已完成的任务保留在磁盘上（提供历史记录），但只有 pending 和 in_progress 的任务被加载到内存的活跃任务列表中。
+
+### 4.5 与 TodoWrite 的对比
+
+| 维度 | TodoWrite（内存清单） | Task System（持久化 DAG） |
 |---|---|---|
 | 存储 | 进程内 | `.tasks/{id}.json` |
 | 依赖 | 无 | `blockedBy` 图 |
 | 生命周期 | 当前会话 | 跨会话 |
 | 协作 | 无认领机制 | `owner` / `claim` |
+| 解锁 | 手动 | 自动报告 |
 
-### 10.4 与主循环的集成
+## 5. 后台异步执行
 
-在 `agent_loop` 的工具调用分发阶段：
-1. 每个 tool_use block 先经过 `should_run_background()` 判断
-2. 后台执行：调用 `start_background_task()` → 立即返回占位结果
-3. 同步执行：直接调用 handler → 返回真实结果
-4. 每轮结束时 `collect_background_results()` 收集完成的通知
-5. 通知与同步结果合并为一条 `user` message 发送
+### 5.1 设计理论
 
----
+v1-v5 的工具执行是**同步阻塞**的——Agent 发起 `bash "npm install"` 后，主循环被阻塞，等待安装完成（可能数分钟）。这期间 Agent 无法做任何其他事情——不能继续推理、不能处理其他工具调用、甚至不能响应 shutdown 请求。
 
-## 11. 安全机制
+**同步 vs 异步的本质区别**：同步执行是"我在等结果"——调用方的时间线和被调用方的时间线耦合。异步执行是"我等结果到达"——调用方的时间线和被调用方的时间线解耦。v6 的后台执行实现了这种解耦——Agent 发起操作后继续工作，操作完成的结果通过通知机制异步返回。
 
-### 10.1 命令过滤 (`permission_hook`)
+**两级判断的设计**：后台执行的决策采用两级判断——模型显式请求（`run_in_background: true`）和启发式匹配（慢操作关键词）。模型显式请求优先，因为它基于 LLM 对任务的语义理解（"npm install 一般需要 2-3 分钟，应该后台执行"），比关键词匹配更准确。关键词匹配是 fallback——当模型没有显式标记但命令明显是慢操作时。
 
-**Deny List（直接阻断）：**
-`rm -rf /`、`sudo`、`shutdown`、`reboot`、`mkfs`、`dd if=`
+**为什么不把所有操作都后台执行**：后台执行有代价——Agent 不能立即获取结果。如果 Agent 需要文件内容来决定下一步操作（`read_file config.yaml`），后台执行会延迟决策。同步执行适合"需要立即结果"的操作，后台执行适合"结果不需要立即使用"的操作。
 
-**Destructive List（交互确认）：**
-`rm `、`> /etc/`、`chmod 777`
+### 5.2 执行流程
 
-### 10.2 路径安全
+后台执行的完整生命周期分为四个阶段：
 
-`safe_path()` 函数确保所有文件操作都在工作区内：
+**阶段一：判断**。`should_run_background(block)` 检查两个条件——block 中是否有 `run_in_background: true` 参数（LLM 显式要求）、或 command/description 中是否包含慢操作关键词。任一条件为 true 即进入后台。
+
+**阶段二：分发**。`start_background_task(block, handler)` 创建 daemon 线程，线程内部执行 `handler(**block.input)`。daemon 线程的特点是在主线程退出时自动终止——Agent 退出时不需要手动清理后台线程。
+
+**阶段三：占位**。主循环不等待后台线程完成，立即返回占位 tool_result `"[Background task bg_0001 started] Command: npm install..."`。LLM 收到这个占位结果，知道操作已启动但结果待定，继续处理其他工作。
+
+**阶段四：通知**。每轮循环的 `collect_background_results()` 检查 `background_tasks` 字典中 `status == "completed"` 的条目。将结果包装为 `<task_notification>` XML 注入到下一轮 user message 中。LLM 看到通知，知道后台任务的结果，整合到后续推理中。
+
+### 5.3 通知格式
+
+通知格式的设计解决了"如何区分原始请求和后台完成通知"的问题：
+
+```xml
+<task_notification>
+  <task_id>bg_0001</task_id>
+  <status>completed</status>
+  <command>pip install torch</command>
+  <summary>Successfully installed torch-2.1.0</summary>
+</task_notification>
+```
+
+**为什么不复用原始 tool_use_id**：Anthropic Messages API 要求一个 `tool_use` 块只能对应一个 `tool_result` 块。后台任务启动时已经发送了占位 tool_result（如 "Background task started"），不能再发送第二个 tool_result。后台完成的结果必须通过独立的 user message 注入，使用新的 `task_id`（如 `bg_0001`）关联到原始请求。
+
+**XML 格式而非纯文本的原因**：XML 提供了明确的结构边界——LLM 知道 `<task_notification>` 是系统通知，不是用户说的话。与记忆注入（v5 的 `<relevant_memories>`）一致，XML 标签是系统注入信息的标准格式。
+
+### 5.4 线程安全
+
+后台执行引入了多线程环境，`background_tasks` 和 `background_results` 两个字典被多个线程同时访问。
+
+**竞态风险分析**：后台线程在任务完成时写入 `background_tasks[id]["status"] = "completed"` + 写入 `background_results[id]`，主循环在 `collect_background_results()` 中读取这两个字典。如果不在写入时加锁，主循环可能读到"status 是 completed 但 result 还是空"的不一致状态。
+
+**`threading.Lock` 的保护机制**：所有对 `background_tasks` 和 `background_results` 的读写都通过 `background_lock.acquire()` / `release()` 保护。锁的粒度是全局的（整个字典），而不是每条记录单独一把锁。全局锁实现简单，在 Agent 场景中足够（后台任务数量少，锁竞争概率低）。
+
+### 5.5 慢操作关键词
+
 ```python
-path = (WORKDIR / p).resolve()
-if not path.is_relative_to(WORKDIR):
-    raise ValueError(f"Path escapes workspace: {p}")
+SLOW_KEYWORDS = ["install", "build", "test", "deploy", "compile",
+    "docker build", "pip install", "npm install", "cargo build", ...]
 ```
 
-### 10.3 工作区外写入检查
+**关键词选择的工程依据**：这些关键词来自对常见软件工程操作的时间经验——包管理操作（pip/npm/apt/yum install）通常 30s-5min，编译操作（mvn/gradle/make/build）通常 1-10min，容器操作（docker build）通常 2-15min。包含具体的命令名称（如 `pip install`）和通用动词（如 `install`），兼顾精确匹配和泛化。
 
-`write_file` 和 `edit_file` 工具在写入前检查路径是否在工作区内，超出时需要用户交互确认。
+**为什么这是 fallback 而非主要判断**：关键词匹配可能误判——`echo "run npm install" > script.sh` 包含 `npm install` 但不应该后台执行。LLM 的显式标记更准确，因为它基于语义理解而非字符串匹配。真实 Claude Code 主要依赖 LLM 的 `run_in_background` 标记，关键词只是少数不支持此参数的兼容性 fallback。
 
----
+## 6. 与 v5 的对比
 
-## 12. 典型运行示例
+| 维度 | v5 | v6 |
+|---|---|---|
+| 任务管理 | 无（TodoWrite 内存清单） | 持久化 DAG（.tasks/ 目录） |
+| 执行模型 | 全部同步 | 慢操作后台执行 |
+| 依赖管理 | 无 | blockedBy + can_start() |
+| 跨会话 | 任务丢失 | 文件持久化，重启恢复 |
+| 工具数 | 7 | 12（+5 任务工具） |
+| 模块数 | 11 | 12 |
 
-```
-输入问题，回车发送。输入 q 退出。
+v6 的任务系统和后台执行是 v7/v8 多 Agent 协作的基础——任务认领和分布式执行都依赖于此。
 
-[STARTUP] config: workdir=D:\project, model=deepseek-v4-flash, max_tokens=8000
-[STARTUP] llm: base_url=https://api.deepseek.com/anthropic
-[STARTUP] tools: registered=['bash', 'read_file', 'write_file', 'edit_file', 'glob', 'compact', 'spawn_subagent', 'create_task', 'list_tasks', 'get_task', 'claim_task', 'complete_task']
-[STARTUP] system_prompt: chars=456
-[SKILL] scan_start: dir=D:\project\skill
-[SKILL] loaded: name=code_review, chars=1200
-[SKILL] loaded: name=data_analysis, chars=980
-[SKILL] scan_done: total=4
+### 7.1 后台执行的"部分完成"问题
 
-s03 >> 帮我看看 main.py 的代码结构
+异步执行引入了一个复杂的状态管理问题：后台任务可能**部分完成**。例如 `npm install` 启动了，但在安装过程中 Agent 退出了。daemon 线程随主线程终止而终止，但文件系统可能处于不一致状态（部分依赖已安装、部分未安装）。
 
-[SESSION] round_start: round=1, input=帮我看看 main.py 的代码结构
-[SESSION] prompt: workdir=D:\project
-[ITERATION] start: iteration=1, messages=1
-[API] response: elapsed=1.85s, stop_reason=tool_use, text_blocks=1, tool_blocks=1, input_tokens=1200, output_tokens=150
-[TOOL] start: name=read_file, id=toolu_01abc, args=['main.py', None]
-[TOOL] end: name=read_file, elapsed=0.01s, output=2340 chars, rc=
-[ITERATION] end: iteration=1, tool_results=1
-[ITERATION] start: iteration=2, messages=3
-[API] response: elapsed=2.31s, stop_reason=end_turn, text_blocks=1, tool_blocks=0, input_tokens=3500, output_tokens=400
-[SESSION] agent_finished: stop_reason=end_turn
-[SESSION] stop: tool_calls=1
+v6 对此没有处理——它接受"Agent 退出时可能有未完成的后台任务"。这是一个务实但有风险的设计。生产系统需要：
+- 后台任务的状态持久化（重启后检查并恢复）
+- 事务性任务执行（完成 or 回滚，没有中间状态）
+- 超时机制（后台任务不能无限运行）
 
-（Agent 的文本回复输出到这里）
-```
+### 7.2 DAG 的"依赖死锁"问题
 
-### 12.2 后台任务运行示例
+DAG 本身保证无环，但在实际操作中可能出现**逻辑死锁**——不是图的死循环，而是任务的现实不可行性：
 
 ```
-s03 >> 帮我安装依赖并读取配置文件
-
-[SESSION] round_start: round=2, input=帮我安装依赖并读取配置文件
-[ITERATION] start: iteration=1, messages=3
-[API] response: elapsed=1.92s, stop_reason=tool_use, text_blocks=1, tool_blocks=2
-
-> bash (pip install -r requirements.txt)
-[BACKGROUND] dispatched: bg_id=bg_0001, command=pip install -r requirements.txt
-> read_file (config.yaml)
-[TOOL] end: name=read_file, elapsed=0.00s, output=512 chars
-[ITERATION] end: iteration=1, tool_results=2
-
-（后台 pip install 仍在运行，Agent 继续处理配置文件内容）
-
-[ITERATION] start: iteration=2, messages=5
-[API] response: elapsed=2.15s, stop_reason=tool_use, text_blocks=1, tool_blocks=1
-
-> bash (npm run build)
-[BACKGROUND] dispatched: bg_id=bg_0002, command=npm run build
-
-（bg_0001 完成）
-[BACKGROUND] completed: bg_id=bg_0001, command=pip install -r requirements.txt, output_chars=1234
-[BACKGROUND] inject: count=1
-
-（Agent 看到 <task_notification>，知道依赖安装完成）
+Task A: 安装 Python 依赖  (blockedBy: [])
+Task B: 运行 Python 测试  (blockedBy: [A])
+Task C: 配置 Docker 环境 (blockedBy: [B])
+Task D: 构建 Docker 镜像 (blockedBy: [C, A])
 ```
+
+Task D 依赖 Task C 和 Task A。但如果 Task C 失败了（Docker 未安装），Task D 永远无法开始——不是因为 DAG 有 bug，而是因为**依赖链中的某个环节失败导致下游全部阻塞**。
+
+v6 对此没有处理——任务状态只有 pending/in_progress/completed，没有 failed/blocked。真实的 Claude Code 通过更丰富的任务状态（包括 cancelled、failed、skipped）和依赖重评估（失败的上游是否真的阻塞下游？）来解决这个问题。

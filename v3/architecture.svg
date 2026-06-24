@@ -1,0 +1,126 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 620">
+  <defs>
+    <marker id="a" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <polygon points="0 0, 8 3, 0 6" fill="#2980B9"/>
+    </marker>
+    <filter id="sh"><feDropShadow dx="1.5" dy="1.5" stdDeviation="2.5" flood-color="#00000015"/></filter>
+    <linearGradient id="hd"><stop offset="0%" stop-color="#2C3E50"/><stop offset="100%" stop-color="#34495E"/></linearGradient>
+    <linearGradient id="cfg"><stop offset="0%" stop-color="#2980B9"/><stop offset="100%" stop-color="#1A5276"/></linearGradient>
+  </defs>
+
+  <rect width="880" height="620" fill="#FFFFFF" rx="8"/>
+
+  <!-- Title -->
+  <rect x="0" y="0" width="880" height="42" fill="url(#hd)" rx="8"/>
+  <rect x="0" y="21" width="880" height="21" fill="url(#hd)"/>
+  <text x="440" y="27" text-anchor="middle" fill="#FFFFFF" font-family="Arial" font-size="16" font-weight="bold">Agent v3 — 模块化 + 子Agent架构</text>
+
+  <!-- main.py area -->
+  <rect x="15" y="52" width="560" height="275" rx="6" fill="#F8F9FA" stroke="#BDC3C7" stroke-width="1.5"/>
+  <text x="30" y="72" fill="#34495E" font-family="Arial" font-size="13" font-weight="bold">main.py — 编排层 + 工具注册</text>
+
+  <!-- agent_loop -->
+  <rect x="30" y="82" width="530" height="45" rx="5" fill="#EBF5FB" stroke="#85C1E9" stroke-width="1.5" filter="url(#sh)"/>
+  <text x="295" y="100" text-anchor="middle" fill="#1A5276" font-family="Arial" font-size="12" font-weight="bold">agent_loop</text>
+  <text x="295" y="117" text-anchor="middle" fill="#7F8C8D" font-family="Arial" font-size="10">记忆加载 → LLM调用 → Hook分发 → 工具执行 → 回传</text>
+
+  <!-- Module dependency section -->
+  <text x="30" y="150" fill="#34495E" font-family="Arial" font-size="11" font-weight="bold">模块依赖关系:</text>
+
+  <!-- config.py -->
+  <rect x="45" y="160" width="140" height="48" rx="5" fill="url(#cfg)" filter="url(#sh)"/>
+  <text x="115" y="180" text-anchor="middle" fill="#FFF" font-family="Arial" font-size="11" font-weight="bold">config.py</text>
+  <text x="115" y="196" text-anchor="middle" fill="#D6EAF8" font-family="Arial" font-size="9">统一配置 · 单例</text>
+
+  <!-- llm.py -->
+  <rect x="210" y="160" width="140" height="48" rx="5" fill="url(#cfg)" filter="url(#sh)"/>
+  <text x="280" y="180" text-anchor="middle" fill="#FFF" font-family="Arial" font-size="11" font-weight="bold">llm.py</text>
+  <text x="280" y="196" text-anchor="middle" fill="#D6EAF8" font-family="Arial" font-size="9">客户端 · 单例</text>
+
+  <!-- hook.py -->
+  <rect x="45" y="225" width="140" height="40" rx="5" fill="#F4ECF7" stroke="#AF7AC5" filter="url(#sh)"/>
+  <text x="115" y="243" text-anchor="middle" fill="#6C3483" font-family="Arial" font-size="11" font-weight="bold">hook.py</text>
+  <text x="115" y="256" text-anchor="middle" fill="#7F8C8D" font-family="Arial" font-size="9">Hook系统 · 4点+5handler</text>
+
+  <!-- skill.py -->
+  <rect x="210" y="225" width="140" height="40" rx="5" fill="#E8F8F5" stroke="#1ABC9C" filter="url(#sh)"/>
+  <text x="280" y="243" text-anchor="middle" fill="#0E6655" font-family="Arial" font-size="11" font-weight="bold">skill.py</text>
+  <text x="280" y="256" text-anchor="middle" fill="#7F8C8D" font-family="Arial" font-size="9">技能加载</text>
+
+  <!-- tools.py -->
+  <rect x="375" y="190" width="160" height="40" rx="5" fill="#D4E6F1" stroke="#5DADE2" filter="url(#sh)"/>
+  <text x="455" y="208" text-anchor="middle" fill="#1A5276" font-family="Arial" font-size="11" font-weight="bold">tools.py</text>
+  <text x="455" y="222" text-anchor="middle" fill="#7F8C8D" font-family="Arial" font-size="9">5个工具实现</text>
+
+  <!-- Dependency arrows -->
+  <line x1="185" y1="184" x2="208" y2="184" stroke="#2980B9" stroke-width="1.5" marker-end="url(#a)"/>
+  <line x1="185" y1="208" x2="208" y2="208" stroke="#2980B9" stroke-width="1.5" marker-end="url(#a)"/>
+  <line x1="255" y1="225" x2="280" y2="225" stroke="#2980B9" stroke-width="1.5" marker-end="url(#a)"/>
+  <line x1="115" y1="265" x2="115" y2="280" stroke="#2980B9" stroke-width="1.5"/>
+  <line x1="115" y1="280" x2="430" y2="280" stroke="#2980B9" stroke-width="1.5"/>
+  <line x1="430" y1="280" x2="430" y2="230" stroke="#2980B9" stroke-width="1.5"/>
+  <line x1="280" y1="245" x2="350" y2="245" stroke="#2980B9" stroke-width="1.5"/>
+  <line x1="350" y1="245" x2="350" y2="210" stroke="#2980B9" stroke-width="1.5" marker-end="url(#a)"/>
+  <line x1="115" y1="245" x2="115" y2="245" stroke="#2980B9" stroke-width="1.5"/>
+  <line x1="45" y1="210" x2="45" y2="210" stroke="#2980B9" stroke-width="1.5"/>
+
+  <!-- subagent.py -->
+  <rect x="375" y="245" width="160" height="52" rx="5" fill="#FDEBD0" stroke="#F0B27A" filter="url(#sh)"/>
+  <text x="455" y="263" text-anchor="middle" fill="#7E5109" font-family="Arial" font-size="11" font-weight="bold">subagent.py</text>
+  <text x="455" y="278" text-anchor="middle" fill="#2C3E50" font-family="Arial" font-size="9">spawn_subagent()</text>
+  <text x="455" y="291" text-anchor="middle" fill="#7F8C8D" font-family="Arial" font-size="8">独立消息循环 + 受限工具集</text>
+
+  <!-- ===== SUBAGENT DETAIL ===== -->
+  <rect x="15" y="340" width="850" height="268" rx="6" fill="#FEF5E7" stroke="#F0B27A" stroke-width="1.5"/>
+  <text x="30" y="362" fill="#7E5109" font-family="Arial" font-size="13" font-weight="bold">subagent.py — 子Agent 执行流程</text>
+
+  <!-- Flow boxes -->
+  <rect x="50" y="378" width="180" height="42" rx="5" fill="#34495E" filter="url(#sh)"/>
+  <text x="140" y="396" text-anchor="middle" fill="#FFF" font-family="Arial" font-size="11" font-weight="bold">主Agent调用</text>
+  <text x="140" y="412" text-anchor="middle" fill="#BDC3C7" font-family="Arial" font-size="9">spawn_subagent(description)</text>
+
+  <line x1="230" y1="399" x2="265" y2="399" stroke="#E67E22" stroke-width="2" marker-end="url(#a)"/>
+
+  <rect x="270" y="378" width="180" height="42" rx="5" fill="#FDEBD0" stroke="#E67E22" filter="url(#sh)"/>
+  <text x="360" y="396" text-anchor="middle" fill="#7E5109" font-family="Arial" font-size="11" font-weight="bold">创建子Agent</text>
+  <text x="360" y="412" text-anchor="middle" fill="#2C3E50" font-family="Arial" font-size="9">独立消息列表 + 受限工具</text>
+
+  <line x1="450" y1="399" x2="485" y2="399" stroke="#E67E22" stroke-width="2" marker-end="url(#a)"/>
+
+  <!-- Sub-agent loop -->
+  <rect x="490" y="370" width="350" height="100" rx="6" fill="#E8F8F5" stroke="#1ABC9C" stroke-width="2" filter="url(#sh)"/>
+  <text x="665" y="390" text-anchor="middle" fill="#0E6655" font-family="Arial" font-size="11" font-weight="bold">子Agent循环 (max 30轮)</text>
+  <line x1="665" y1="396" x2="665" y2="396" stroke="#1ABC9C" stroke-width="0"/>
+
+  <text x="505" y="410" fill="#2C3E50" font-family="Arial" font-size="9">① LLM API调用</text>
+  <text x="505" y="426" fill="#2C3E50" font-family="Arial" font-size="9">② 判断 stop_reason ≠ tool_use → 结束</text>
+  <text x="505" y="442" fill="#2C3E50" font-family="Arial" font-size="9">③ 工具执行 (Hook: PreToolUse → handler → PostToolUse)</text>
+  <text x="505" y="458" fill="#2C3E50" font-family="Arial" font-size="9">④ tool_result → 回到①</text>
+
+  <line x1="840" y1="450" x2="860" y2="450" stroke="#E67E22" stroke-width="2" marker-end="url(#a)"/>
+
+  <!-- Result extraction -->
+  <rect x="50" y="455" width="780" height="42" rx="5" fill="#D4E6F1" stroke="#5DADE2" filter="url(#sh)"/>
+  <text x="440" y="473" text-anchor="middle" fill="#1A5276" font-family="Arial" font-size="11" font-weight="bold">三级回退结果提取: ①最后消息文本 → ②最后assistant消息 → ③默认错误信息</text>
+
+  <line x1="440" y1="497" x2="440" y2="520" stroke="#2980B9" stroke-width="2" marker-end="url(#a)"/>
+
+  <!-- Return -->
+  <rect x="310" y="525" width="260" height="36" rx="5" fill="#D5F5E3" stroke="#27AE60" filter="url(#sh)"/>
+  <text x="440" y="548" text-anchor="middle" fill="#1E8449" font-family="Arial" font-size="12" font-weight="bold">返回结果给主Agent</text>
+
+  <!-- Tools restriction note -->
+  <rect x="50" y="570" width="380" height="28" rx="4" fill="#FDEDEC" stroke="#E74C3C"/>
+  <text x="240" y="588" text-anchor="middle" fill="#922B21" font-family="Arial" font-size="10">
+    ⚠ 子Agent不可用: spawn_subagent (防止无限嵌套)
+  </text>
+
+  <rect x="460" y="570" width="380" height="28" rx="4" fill="#F4ECF7" stroke="#AF7AC5"/>
+  <text x="650" y="588" text-anchor="middle" fill="#6C3483" font-family="Arial" font-size="10">
+    ✓ 共享Hook: 权限检查/日志记录对子Agent同样生效
+  </text>
+
+  <!-- Legacy badge -->
+  <rect x="15" y="585" width="200" height="20" rx="4" fill="#F2F3F4"/>
+  <text x="115" y="599" text-anchor="middle" fill="#7F8C8D" font-family="Arial" font-size="9">🐛 修复: trigger_hook 返回值（v2的bug）</text>
+</svg>

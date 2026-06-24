@@ -1,467 +1,227 @@
-# Agent v4 技术文档
+# Agent v4 — 统一日志 + 上下文压缩
 
-## 1. 项目概述
+## 1. 概述
 
-Agent v4 是一个基于 Anthropic SDK 构建的 Python 编码智能体，使用 DeepSeek 作为 LLM 后端。v4 在 v3 基础上新增了**上下文压缩管线**、**Hook 生命周期系统**、**统一日志**和**子 Agent 派发**能力。
+v4 新增两个关键子系统：**统一日志**和**上下文压缩管线**。统一日志通过 `log_event()` 替代所有 `print()` 调用，工具调用日志由 Hook 自动触发，业务代码零侵入。上下文压缩通过 4 级管线防止长会话 token 超限。
 
-### 1.1 技术栈
+这两个子系统解决的问题在 v1-v3 中被完全忽视，但它们是 Agent 从"玩具"到"工具"的关键一步。
 
-| 组件 | 技术 |
-|---|---|
-| LLM SDK | `anthropic` (Python) |
-| 后端模型 | DeepSeek v4 Flash (通过 Anthropic 兼容 API) |
-| 配置管理 | `python-dotenv` + `.env` |
-| Python 版本 | 3.11+ |
+### 1.1 可观测性的架构意义
 
-### 1.2 快速启动
+没有统一日志的 Agent（v1-v3）是一个**黑盒**：你只能看到用户的输入和 LLM 的输出，中间发生了什么完全不可见。当 Agent 的行为不符合预期时——比如它没有执行预期的工具、输出了错误的文件内容——你只能靠猜测来定位问题。
 
-```bash
-# 1. 安装依赖
-pip install anthropic python-dotenv
+统一日志系统解决的不只是"好看"的问题，而是**可调试性**这一架构基础。它的设计遵循三个原则：
 
-# 2. 配置 .env（见下方配置说明）
+**门面模式**：所有模块通过 `log_event(category, event, **data)` 输出日志，底层是 `print()` 还是写入文件还是发送到远程服务，对调用方完全透明。如果将来需要将所有日志发送到 ElasticSearch，只需修改 `log_event` 函数的实现——所有调用方代码不变。
 
-# 3. 运行
-python main.py
+**零侵入性**：工具函数不需要写任何日志代码。v2 的 Hook 系统为"自动派发"提供了基础——`trigger_hook("PreToolUse")` 内部自动派发 `OnToolStart` 日志，`trigger_hook("PostToolUse")` 内部自动派发 `OnToolEnd` 日志。工具代码只负责业务逻辑，日志完全由 Hook 基础设施提供。
+
+**结构化语义**：日志不是自由文本，而是 `[CATEGORY] event: key=value` 的结构化格式。这使得日志可以被 `grep`、被脚本解析、被监控系统消费。颜色方案（灰色=普通、黄色=警告、红色=错误）则提供了人类可读的视觉层次。
+
+### 1.2 上下文压缩的"不可能三角"
+
+LLM Agent 面临一个根本性的架构矛盾，我称之为"上下文不可能三角"：
+
+```
+      完整性（保留所有信息）
+          /\
+         /  \
+        /    \
+       /______\
+  低成本         可扩展性
+（Zero LLM调用）  （自动处理任意长度对话）
 ```
 
----
+你只能选两个：
+- **完整性 + 低成本** = 手动压缩（用户自己决定丢弃什么，零 LLM 调用，但需要人工干预）
+- **完整性 + 可扩展性** = LLM 摘要（保留核心信息、自动处理任意长度，但每次压缩需要 1 次 LLM 调用）
+- **低成本 + 可扩展性** = 简单截断（零 LLM 调用、自动处理，但可能丢失关键信息）
 
-## 2. 文件结构
+v4 的 4 级压缩管线是对这个三角的**分层妥协**：
+
+- **L3（大结果落盘）**：完整性 + 低成本（无损 + 零LLM调用），但不解决累积问题
+- **L1（消息裁剪）**：可扩展性 + 低成本（自动 + 零LLM调用），但丢失中间信息
+- **L2（旧结果压缩）**：可扩展性 + 低成本（自动 + 零LLM调用），但丢失细节
+- **L0（LLM摘要）**：完整性 + 可扩展性（保留核心 + 自动），但需要 1 次 LLM 调用
+
+管线设计的精髓在于**触发顺序**：L3 先处理最大的单个问题（一个工具结果可能有数万字符），L1/L2 处理累积性膨胀（消息数量增多、旧结果堆积），L0 作为最后手段（前面的方法都不够时才出动 LLM）。
+
+## 2. 系统架构
+
+![v4 系统架构图](architecture.svg)
+
+*主循环集成4级压缩管线（L3→L1→L2→L0），Hook系统自动派发工具日志（OnToolStart/OnToolEnd），实现零侵入的可观测性。*
+
+## 3. 文件结构
 
 ```
 v4/
-├── .env                  # 环境变量配置（API Key、模型、参数）
-├── .gitignore
-├── config.py             # 统一配置中心，从 .env 加载所有配置
-├── llm.py                # Anthropic 客户端单例
-├── log.py                # 统一日志模块（log_event）
-├── hook.py               # Hook 生命周期系统（权限、日志、控制流）
-├── tools.py              # 工具定义与 handler（bash/read/write/edit/glob）
-├── skill.py              # 技能加载与注册（从 skill/ 目录扫描 SKILL.md）
-├── subagent.py           # 子 Agent 模块（任务派发，不支持嵌套）
-├── compact.py            # 上下文压缩管线（4 级压缩策略）
-├── main.py               # 入口，Agent 主循环
-└── skill/                # 技能定义目录
-    ├── code_review/SKILL.md
-    ├── data_analysis/SKILL.md
-    ├── debug_helper/SKILL.md
-    └── translate/SKILL.md
+├── config.py      # 统一配置中心
+├── llm.py         # Anthropic 客户端单例
+├── log.py         # 统一日志模块 ← 新增
+├── main.py        # 入口：agent_loop + 压缩 + 日志
+├── tools.py       # 5 个工具实现
+├── hook.py        # Hook 系统（6 点，含自动日志派发）
+├── skill.py       # 技能加载
+├── subagent.py    # 子 Agent
+└── compact.py     # 上下文压缩管线 ← 新增
 ```
 
-### 2.1 模块依赖关系
+## 4. 统一日志系统
+
+### 4.1 设计理论
+
+v1-v3 的日志是分散的 `print()` 调用，格式不统一，颜色不一致，无法过滤。v4 引入**统一日志门面**（Facade）模式：所有模块通过唯一的 `log_event()` 函数输出日志，底层实现（格式、颜色、输出目标）对调用方透明。
+
+**为什么零侵入如此重要：**
+
+在 v3 中，如果你想在工具执行前后添加日志，你需要在每个 handler 函数中写 `print()`。更糟糕的是，如果不同开发者写的日志格式不同，输出会变得混乱。v4 的 Hook 自动派发解决了这个问题：
 
 ```
-main.py  （入口，Agent 主循环）
-  ├── config.py    （统一配置中心）
-  ├── llm.py       （Anthropic 客户端单例）
-  ├── log.py       （统一日志，无依赖）
-  ├── hook.py      （Hook 系统 ← config, log）
-  ├── skill.py     （技能加载 ← config, log）
-  ├── tools.py     （工具函数 ← config）
-  ├── subagent.py  （子 Agent ← config, llm, hook, log）
-  └── compact.py   （压缩管线 ← log, llm）
+工具执行（业务代码）         Hook 系统（日志层）
+─────────────────────       ────────────────────
+handler(**input):            trigger_hook(PreToolUse):
+  # 纯业务逻辑                  → OnToolStart → log_event(...)
+  result = ...                 permission_hook(...)等
+  return result               trigger_hook(PostToolUse):
+                                → OnToolEnd → log_event(...)
 ```
 
-循环依赖处理：`subagent.py` 通过延迟导入 `from tools import TOOL_HANDLERS` 避免 `tools → subagent → tools` 循环。
+工具代码**完全不知道日志的存在**。这是一个成熟的架构决策——业务逻辑不应该关心可观测性基础设施。
 
----
+**门面模式的影响：**
 
-## 3. 配置说明
+如果将来需要把日志发送到文件、数据库或远程服务，只需修改 `log_event()` 函数——所有调用方代码不变。这就是门面模式的真正威力：接口稳定，实现可替换。
 
-所有配置通过 `.env` 文件管理，由 `config.py` 统一加载。
+### 4.2 log_event 接口
 
-| 变量名 | 必填 | 默认值 | 说明 |
-|---|---|---|---|
-| `ANTHROPIC_BASE_URL` | 否 | (官方 API) | API 端点，DeepSeek 使用 `https://api.deepseek.com/anthropic` |
-| `ANTHROPIC_AUTH_TOKEN` | 是 | — | API Key |
-| `MODEL_ID` | 是 | — | 模型 ID，如 `deepseek-v4-flash` |
-| `MAX_TOKENS` | 否 | `8000` | 主 Agent 单次最大输出 token |
-| `SUB_MAX_TOKENS` | 否 | `4000` | 子 Agent 单次最大输出 token |
-| `SUB_MAX_TURNS` | 否 | `30` | 子 Agent 最大循环轮次 |
-| `PROMPT_NAME` | 否 | `s03` | REPL 提示符显示名称 |
-| `SKILLS_DIR` | 否 | `./skill` | 技能目录路径 |
+`log_event(category, event, **data)` 是 v4 日志系统的唯一对外接口。所有模块（main.py、tools.py、hook.py、compact.py 等）通过这一个函数输出日志。
 
----
-
-## 4. 核心架构
-
-### 4.1 Agent 主循环 (`agent_loop`)
-
-```
-用户输入
-  │
-  ▼
-┌──────────────────────────────────────────────────┐
-│  agent_loop(messages)                            │
-│  ┌────────────────────────────────────────────┐  │
-│  │ 1. 上下文压缩预处理（0 API 调用）           │  │
-│  │    tool_result_budget → snip → micro        │  │
-│  │ 2. LLM 摘要压缩（条件触发，1 API 调用）     │  │
-│  │ 3. 调用 LLM API                            │  │
-│  │ 4. 判断 stop_reason                         │  │
-│  │    ├─ tool_use → 执行工具 → 回到 1          │  │
-│  │    └─ end_turn → 触发 Stop hook → 返回      │  │
-│  └────────────────────────────────────────────┘  │
-└──────────────────────────────────────────────────┘
-  │
-  ▼
-输出结果
-```
-
-**关键设计：**
-- 循环直到 LLM 不再请求工具调用才退出
-- 每轮迭代自动执行上下文压缩，防止 token 超限
-- `Stop` hook 可以强制继续循环（返回值注入为 user message）
-
-### 4.2 工具调用流程
-
-```
-LLM 返回 tool_use block
-  │
-  ▼
-trigger_hook("PreToolUse", block)
-  ├─ 自动派发 OnToolStart → 日志记录
-  ├─ permission_hook → 权限检查（可阻断）
-  │
-  ├─ 被阻断 → 返回错误信息作为 tool_result
-  │
-  └─ 通过 → 执行 handler(block.input)
-       │
-       ▼
-     trigger_hook("PostToolUse", block, output)
-       ├─ 自动派发 OnToolEnd → 日志记录（含耗时）
-       └─ large_output_hook → 大输出警告
-```
-
-### 4.3 工具列表
-
-| 工具名 | Handler | 功能 |
-|---|---|---|
-| `bash` | `run_bash()` | 执行 shell 命令（120s 超时） |
-| `read_file` | `run_read()` | 读取文件内容，支持行数限制 |
-| `write_file` | `run_write()` | 写入文件（自动创建父目录） |
-| `edit_file` | `run_edit()` | 精确文本替换（单次） |
-| `glob` | `run_glob()` | 按模式搜索文件 |
-| `compact` | `run_compact()` | 手动触发上下文压缩 |
-| `spawn_subagent` | `spawn_subagent()` | 派发子 Agent 执行子任务 |
-
----
-
-## 5. Hook 生命周期系统
-
-Hook 系统是 v4 的核心扩展机制，所有权限检查、日志记录、行为控制都通过 Hook 实现。
-
-### 5.1 Hook 类型
-
-| Hook 名称 | 触发时机 | 返回值语义 |
-|---|---|---|
-| `UserPromptSubmit` | 用户输入进入 LLM 前 | 忽略（纯观察） |
-| `PreToolUse` | 工具执行前 | 非 None → **阻断工具**，返回值成为 tool_result |
-| `PostToolUse` | 工具执行后 | 忽略（纯观察） |
-| `Stop` | Agent 主循环即将退出 | 非 None → **强制继续**，返回值注入为 user message |
-| `OnToolStart` | 工具执行前（自动派发） | 忽略（日志专用） |
-| `OnToolEnd` | 工具执行后（自动派发） | 忽略（日志专用） |
-
-### 5.2 已注册的 Hook
-
-| 函数 | Hook 点 | 职责 |
-|---|---|---|
-| `permission_hook` | `PreToolUse` | 阻断危险 bash 命令（deny list）；交互确认破坏性命令；阻止工作区外写入 |
-| `large_output_hook` | `PostToolUse` | 输出超过 100K 字符时警告 |
-| `context_inject_hook` | `UserPromptSubmit` | 记录工作目录 |
-| `summary_hook` | `Stop` | 打印会话工具调用总数 |
-| `tool_start_hook` | `OnToolStart` | 自动记录工具名称、ID、参数预览 |
-| `tool_end_hook` | `OnToolEnd` | 自动记录工具耗时、输出大小 |
-
-### 5.3 自动派发机制
-
-`trigger_hook()` 函数内部自动处理 `OnToolStart` / `OnToolEnd` 的派发：
-
-```python
-def trigger_hook(hook_name, *args, **kwargs):
-    # PreToolUse → 自动派发 OnToolStart，记录开始时间
-    # 执行控制流 hook handlers
-    # PostToolUse → 自动派发 OnToolEnd，计算耗时
-```
-
-业务代码只需调用 `trigger_hook("PreToolUse", block)` 和 `trigger_hook("PostToolUse", block, output)`，日志自动输出。
-
-### 5.4 扩展 Hook
-
-```python
-# 在 hook.py 中定义函数
-def my_custom_hook(block):
-    """PreToolUse: 自定义逻辑"""
-    if block.name == "bash" and "git push" in block.input.get("command", ""):
-        log_event("CUSTOM", "git_push", cmd=block.input["command"])
-    return None
-
-# 注册
-register_hook("PreToolUse", my_custom_hook)
-```
-
----
-
-## 6. 统一日志系统
-
-### 6.1 设计原则
-
-- **单一输出点**：所有日志通过 `log_event()` 函数输出，底层唯一调用 `print()`
-- **Hook 自动触发**：工具调用的 start/end 日志由 `trigger_hook()` 内部自动派发
-- **业务代码零侵入**：工具函数（`tools.py`）纯业务逻辑，不含任何日志语句
-
-### 6.2 `log_event()` 接口
+**接口设计的刻意约束**：
 
 ```python
 log_event(category: str, event: str, **data)
 ```
 
-**输出格式：** `[CATEGORY] event: key=value, key=value`
+`category` 和 `event` 是必选的字符串参数——这强制了日志的**分类一致性**。category 表示日志来源模块（如 "TOOL"、"API"、"COMPACT"），event 表示具体事件（如 "start"、"end"、"error"）。`**data` 接受任意键值对，提供灵活性——不同事件有不同的上下文数据。
 
-**示例：**
+**为什么是 `**data` 而非固定字段**：如果定义为 `log_event(category, event, elapsed=None, output_size=None, ...)` ，每增加一个新字段都需要修改接口签名。`**data` 允许调用方传递任意上下文字段，而日志实现层（格式化、输出）通过检查 `data` 字典中是否存在特定键来决定展示什么。
+
+**结构化格式的解析价值**：输出格式 `[CATEGORY] event: key=value, key=value` 是为了同时满足人类阅读和机器解析：
 ```
 [TOOL] start: name=bash, id=toolu_01abc, args=['ls -la']
-[TOOL] end: name=bash, elapsed=0.23s, output=1234 chars, rc=(ok)
-[API] response: elapsed=2.15s, stop_reason=tool_use, text_blocks=1, tool_blocks=2, input_tokens=1500, output_tokens=300
-[COMPACT] snip: before=30, after=20, head=10, tail=10
-[SUBAGENT] spawn: task=Read and analyze config.py, model=deepseek-v4-flash, max_turns=30
-[SESSION] round_start: round=1, input=帮我看看这个项目的结构
 ```
+人类可以快速识别"工具开始执行"，机器可以用正则 `\[(.*?)\] (.*?): (.*)` 提取 category、event 和键值对。这种同时服务两个消费者的设计是结构化日志的核心思想。
 
-### 6.3 颜色方案
+### 4.3 颜色方案
 
-| 颜色 | ANSI 码 | 用途 |
+颜色不是装饰——它是**信息密度优化**的手段。当 Agent 输出每秒数十行日志时，通过颜色快速识别日志的重要性比阅读每个单词高效得多。
+
+**语义映射的设计原则**：v4 的颜色选择基于人类对颜色的本能联想和行业约定：
+
+| 颜色 | 作用 | 选择理由 |
 |---|---|---|
-| 灰色 | `\033[90m` | 普通信息（工具、API、压缩、迭代） |
-| 黄色 | `\033[33m` | 警告（大输出、破坏性命令、应急压缩） |
-| 红色 | `\033[31m` | 错误（权限阻断、超时、异常） |
-| 洋红 | `\033[35m` | 子 Agent 事件 |
-| 青色 | `\033[36m` | 用户交互（会话事件） |
+| 灰色 | 普通信息 | 最低视觉权重，不抢夺注意力 |
+| 黄色 | 警告 | "注意，但不是紧急"——从交通信号灯继承的约定 |
+| 红色 | 错误 | "需要关注"——最强烈的颜色，从警报系统继承的约定 |
+| 洋红 | 子Agent | "这不是主Agent的操作"——与主Agent日志形成视觉分离 |
+| 青色 | 用户交互 | "这是外部事件"——与系统内部操作区分 |
 
-### 6.4 日志事件分类
+**为什么洋红用于子 Agent**：子 Agent 的日志会穿插在主 Agent 的日志中——主 Agent 调用子 Agent → 子 Agent 内部执行 → 返回结果。如果不加颜色区分，读者无法分辨"这条日志是主 Agent 产生的还是子 Agent 产生的"。洋红为主 Agent（灰色）和子 Agent 之间建立了明确的视觉边界。
 
-| Category | Event | 触发位置 | 说明 |
-|---|---|---|---|
-| `STARTUP` | `config` | main.py | 配置信息 |
-| `STARTUP` | `llm` | main.py | LLM 客户端信息 |
-| `STARTUP` | `tools` | main.py | 工具注册列表 |
-| `STARTUP` | `system_prompt` | main.py | 系统提示词长度 |
-| `ITERATION` | `start` | main.py | 迭代开始（轮次、消息数） |
-| `ITERATION` | `end` | main.py | 迭代结束（工具结果数） |
-| `API` | `response` | main.py | API 响应详情（耗时、token、blocks） |
-| `TOOL` | `start` | hook.py (自动) | 工具开始执行 |
-| `TOOL` | `end` | hook.py (自动) | 工具执行完成（含耗时） |
-| `TOOL` | `warning` | hook.py | 大输出警告 |
-| `TOOL_BLOCKED` | `blocked` | hook.py | 权限阻断 |
-| `TOOL_BLOCKED` | `warning` | hook.py | 破坏性命令警告 |
-| `COMPACT` | `budget` | compact.py | 大结果落盘 |
-| `COMPACT` | `snip` | compact.py | 消息裁剪 |
-| `COMPACT` | `micro` | compact.py | 旧结果压缩 |
-| `COMPACT` | `llm_summary` | compact.py | LLM 摘要压缩 |
-| `COMPACT` | `emergency` | compact.py | 应急压缩 |
-| `SUBAGENT` | `spawn` | subagent.py | 子 Agent 创建 |
-| `SUBAGENT` | `turn` | subagent.py | 子 Agent 轮次 |
-| `SUBAGENT` | `api_response` | subagent.py | 子 Agent API 响应 |
-| `SUBAGENT` | `finished` | subagent.py | 子 Agent 完成 |
-| `SUBAGENT` | `done` | subagent.py | 子 Agent 总结（耗时、工具数） |
-| `SKILL` | `scan_start` | skill.py | 技能扫描开始 |
-| `SKILL` | `loaded` | skill.py | 技能加载成功 |
-| `SKILL` | `skipped` | skill.py | 技能跳过（无 SKILL.md） |
-| `SKILL` | `build_system` | skill.py | 系统提示词构建 |
-| `SESSION` | `round_start` | main.py | 对话轮次开始 |
-| `SESSION` | `prompt` | hook.py | 用户输入 |
-| `SESSION` | `agent_finished` | main.py | Agent 准备结束 |
-| `SESSION` | `force_continue` | main.py | Stop hook 强制继续 |
-| `SESSION` | `stop` | hook.py | 会话结束（工具调用统计） |
-| `SESSION` | `end` | main.py | 会话退出 |
-| `ERROR` | `no_handler` | main.py | 工具无 handler |
+### 4.4 Hook 自动日志派发
 
----
+v4 的 Hook 系统在 v2 的基础上增加了两个**内部事件**：`OnToolStart` 和 `OnToolEnd`。这些事件不是由用户代码注册的 handler 处理，而是由 Hook 系统自身处理。
 
-## 7. 上下文压缩管线
+**自动派发的实现原理**：`trigger_hook("PreToolUse", block)` 在执行业务 handler 之前，先记录 `time.time()` 为开始时间，然后内部触发 `OnToolStart`（`log_event("TOOL", "start", ...)`）。`trigger_hook("PostToolUse", block, output)` 在执行业务 handler 之后，计算 `time.time() - 开始时间` 为耗时，然后内部触发 `OnToolEnd`（`log_event("TOOL", "end", elapsed=...)`）。
 
-当对话历史增长到接近 token 上限时，压缩管线自动运行，确保 API 调用不会因上下文过长而失败。
+**零侵入的核心含义**：v3 的工具函数可能包含 `print(f"Executing {block.name} with {block.input}")`。v4 的工具函数**完全没有这行代码**——因为 `OnToolStart` 在 `trigger_hook` 内部自动触发。工具开发者不需要知道日志的存在，甚至可能不知道日志被记录了。这是关注点分离的极致：日志基础设施和业务逻辑完全解耦。
 
-### 7.1 四级压缩策略
+**为什么成本如此之低**：添加这个功能不需要修改任何业务代码——只需要在 `hook.py` 的 `trigger_hook` 函数中增加几行逻辑。所有现有的工具函数自动获得日志功能，无需任何改动。这就是 Hook 系统的扩展性优势的完美展示。
 
-按顺序执行，每级都有独立的压缩逻辑：
+## 5. 上下文压缩管线
 
-```
-Level 3 (L3) — tool_result_budget
-  │  将超过 2048 字符的工具结果写入 ./tool_results/，消息中保留截断版本 + 文件路径
-  │
-  ▼
-Level 1 (L1) — snip_compact
-  │  消息数超过 20 时，保留前 10 + 后 10，丢弃中间
-  │
-  ▼
-Level 2 (L2) — micro_compact
-  │  工具结果超过 5 个时，将旧的替换为 "[工具结果被压缩]"，保留最新 5 个
-  │
-  ▼
-Level 0 (LLM) — compact_history
-     当序列化后的消息总长度超过 CONTEXT_LIMIT (50000 字符) 时触发
-     使用 1 次 LLM 调用生成对话摘要，替换整个历史
-     完整记录写入 ./transcripts/
-```
+### 5.1 设计理论
 
-### 7.2 应急压缩 (`emergency_compact`)
+LLM 的上下文窗口是有限的（如 200K token）。Agent 的对话历史会随工具调用不断增长，最终超出限制。上下文压缩的核心思想是**分层压缩**：先做无损压缩（移除冗余），再做有损压缩（LLM 摘要），最后做应急兜底。
 
-当 API 调用失败（如上下文溢出）时的兜底策略：
-- 使用 LLM 生成摘要
-- 保留最近 5 条原始消息 + 摘要
-- 确保下一次 API 调用能成功
+4 级管线的设计原则：
+- **渐进式**：每级压缩程度递增，优先使用低成本方法
+- **可恢复**：被压缩的内容写入磁盘，需要时可以回溯
+- **零 API 调用**：前 3 级纯本地处理，只有 L0 需要 1 次 LLM 调用
+- **自动触发**：每轮循环自动运行，无需人工干预
 
-### 7.3 压缩工具
+### 5.2 四级压缩详解
 
-用户或 LLM 可通过 `compact` 工具手动触发压缩：
-```json
-{"name": "compact", "input": {"focus": "optional focus area"}}
-```
+每级压缩解决上下文膨胀的一个特定维度，触发阈值和策略各不相同。
 
----
+**L3 — tool_result_budget（大结果落盘）**：
+触发条件为工具结果超过 2048 字符时生效。工具结果（尤其是 `bash` 和 `read_file` 的输出）是上下文膨胀的主要来源——一个 `cat large_log.txt` 可能输出十万字符。
 
-## 8. 子 Agent 系统
+实现策略是将完整结果写入 `./tool_results/{id}.txt` 文件，消息中只保留截断版本（前 512 + 后 512 字符）加上文件路径引用。LLM 可以根据截断版本判断是否需要读取完整文件，需要使用 `read_file` 工具主动获取——这与人类浏览日志的方式一致：先看摘要，感兴趣再看全文。
 
-### 8.1 设计
+**L1 — snip_compact（消息裁剪）**：
+触发条件为消息数超过 20 条时生效。LLM Agent 的对话历史遵循"首尾高价值、中间低价值"的分布——开头包含任务描述和初始上下文，结尾包含最近的操作和状态，中间的"尝试-失败-重试"过程在结果确定后价值急剧下降。
 
-子 Agent 是独立的 Agent 循环，用于执行主 Agent 分配的子任务：
+实现策略是保留前 10 条消息（保留任务上下文）和后 10 条消息（保留最新状态），丢弃中间。裁剪不是"删除 21 条中的 1 条"，而是"当增长到 20 条时，裁剪到 10+10=20 条"，之后每次增长 1 条就裁剪 1 条中间消息，保持总数为 20。这种稳态设计避免了"从 100 条突然跳到 20 条"的信息大量丢失。
 
-- **独立系统提示**：简化版，明确禁止嵌套派发
-- **受限工具集**：bash、read_file、write_file、edit_file、glob（不含 spawn_subagent）
-- **独立限制**：`SUB_MAX_TURNS` (30)、`SUB_MAX_TOKENS` (4000)
-- **共享 Hook**：PreToolUse / PostToolUse hooks 对子 Agent 同样生效
+**L2 — micro_compact（旧结果压缩）**：
+触发条件为工具结果超过 5 个时生效。LLM 的注意力主要集中在最近的操作上，早期工具结果的信息通常已被后续推理消化。
 
-### 8.2 调用方式
+实现策略是将最早的工具结果替换为占位符 `[tool result compressed]`，只保留最近 5 个完整结果。这个策略依赖一个心理学假设——人类（和 LLM）的注意力窗口通常为 5-7 个项目。超过这个数量，早期项目即使完整保留也很难被充分利用。
 
-主 Agent 通过 `spawn_subagent` 工具派发任务：
-```json
-{"name": "spawn_subagent", "input": {"description": "Read config.py and summarize its contents"}}
-```
+**L0 — compact_history（LLM摘要）**：
+触发条件为序列化长度超过 50K 字符时生效。这是"最后的防线"——前三级的本地压缩仍不足以将上下文控制在窗口限制内时，需要 LLM 的理解能力来提取关键信息。
 
-### 8.3 执行流程
+实现策略是调用 1 次 LLM 将所有历史生成摘要，完整记录写入 `./transcripts/` 目录以便回溯。摘要包含"最初的任务是什么、已经完成了哪些步骤、当前在做什么、剩余的工作是什么"。L0 的代价最高（1 次 LLM 调用需消耗 token），但保留了核心信息——这是"有损但保真"的压缩。
 
-```
-主 Agent 调用 spawn_subagent(description)
-  │
-  ▼
-创建子 Agent 消息列表 [user: description]
-  │
-  ▼
-┌─────────────────────────────────────────┐
-│ 子 Agent 循环（最多 SUB_MAX_TURNS 轮） │
-│  1. 调用 LLM API                       │
-│  2. stop_reason != tool_use → 结束      │
-│  3. 执行工具调用（通过 hook 系统）       │
-│  4. 回到 1                              │
-└─────────────────────────────────────────┘
-  │
-  ▼
-提取最终文本结果，返回给主 Agent
-```
+### 5.3 应急压缩（emergency_compact）
 
-### 8.4 结果提取策略
+应急压缩与常规压缩有本质区别——它不是"预防性"的，而是"响应性"的。常规压缩在每轮循环开始前自动运行，试图防止上下文溢出。应急压缩在 LLM API 调用已经因上下文过长而失败后才触发。
 
-1. 从最后一条消息提取文本
-2. 如果为空，从最后一条 assistant 消息提取
-3. 如果仍然为空，返回默认错误信息
+**触发流程**：LLM 调用失败 → 检测错误类型为 `prompt_too_long` → 触发 `emergency_compact()` → 使用 LLM 生成摘要（如果 LLM 因为上下文太长而拒绝，则退回到只保留最近 5 条） → 重试。
 
----
+**为什么应急压缩需要更激进的策略**：常规压缩可以保守（保留更多信息，万一漏了可以后续发现），但应急压缩必须"一击即中"——如果压缩后仍然超限，第二次 API 调用也会失败，Agent 彻底卡死。因此应急压缩在必要时会退化到极简策略（只保留最近 5 条），宁可丢失大部分上下文，也要确保系统能继续运行。
 
-## 9. 技能系统
+**应急压缩与 v5 错误恢复的关系**：v4 的应急压缩只处理"上下文过长"这一种错误。v5 的 recovery.py 将错误恢复扩展为三种路径（max_tokens、prompt_too_long、429/529）。`emergency_compact()` 是 v5 recovery 中 Path 2 的前身。
 
-### 9.1 技能定义
+### 5.4 compact 工具
 
-每个技能是 `skill/` 目录下的子文件夹，包含 `SKILL.md` 文件：
+compact 工具允许 LLM **主动请求压缩**。这体现了 v4 的一个重要设计理念——LLM 比任何硬编码的触发阈值更了解"什么时候应该压缩"。
 
-```
-skill/
-└── code_review/
-    └── SKILL.md    # YAML frontmatter + 技能正文
-```
+**实现方式**：compact 是一个可以被 LLM 调用的标准工具，参数 `focus` 告诉压缩函数"在生成摘要时关注哪个方面"。当 LLM 在推理中意识到上下文变得臃肿、相关信息被淹没在大量历史消息中时，它可以主动触发压缩，而不是等待自动触发。
 
-SKILL.md 格式：
-```markdown
----
-name: code_review
-description: 对代码进行多维度审查
----
+**为什么要给 LLM 这个能力**：LLM 比系统更了解对话中哪些信息是重要的——它正在进行推理，知道哪些历史信息对当前决策关键、哪些已经完全无关。自动压缩的触发条件（如"消息超过 20 条"或"序列化超过 50K"）是盲目的——它们只基于数量，不理解语义。让 LLM 自己判断"现在应该清理上下文了"，比被动等待触发更精准、更及时。
 
-# 技能正文（Markdown 格式）
-...
-```
+## 6. 与 v3 的对比
 
-### 9.2 已有技能
+| 维度 | v3 | v4 |
+|---|---|---|
+| 日志 | 分散的 print() | 统一 log_event() + Hook 自动派发 |
+| 上下文管理 | 无（无限增长） | 4 级压缩管线 + 应急兜底 |
+| Hook 点 | 4 个 | 6 个（+OnToolStart/OnToolEnd） |
+| 工具函数 | 含日志代码 | 纯业务逻辑，零日志代码 |
+| 长会话 | 必然溢出 | 自动压缩，可持续工作 |
+| 工具数 | 6 | 7（+compact） |
 
-| 技能 | 功能 |
-|---|---|
-| `code_review` | 多维度代码审查（结构、风格、缺陷、安全、性能） |
-| `data_analysis` | 数据分析与可视化建议（支持 CSV/JSON/Excel） |
-| `debug_helper` | 调试辅助（错误分析、根因定位、修复建议） |
-| `translate` | 智能翻译（上下文感知、术语表支持） |
+v4 的可观测性和可持续性基座是后续所有版本的基础——v5 的记忆和恢复、v6 的后台执行都依赖日志和压缩。
 
-### 9.3 技能加载流程
+### 7.1 压缩管线中的"信息价值"衰减理论
 
-1. `_scan_skills()` 扫描 `SKILLS_DIR` 下所有子目录
-2. 解析每个 `SKILL.md` 的 YAML frontmatter（name、description）
-3. 注册到全局 `SKILL_REGISTRY` 字典
-4. `build_system()` 将技能目录注入系统提示词
+上下文压缩的核心矛盾是**信息价值的不均匀分布**：对话中的每条消息对 LLM 推理的贡献不同。对话开头（任务描述、核心约束）和对话末尾（最近的操作和结果）的信息价值最高，中间的"尝试-失败-调整"过程在已经被消化后价值急剧下降。
 
----
+v4 的 4 级管线利用了这个规律：
+- L1 裁剪中间部分——因为中间的信息价值最低
+- L2 压缩旧的工具结果——因为旧结果的信息已被后续操作消化
+- L3 截断大结果——因为 LLM 通常只需要结果摘要而非全文
+- L0 生成摘要——因为 LLM 自己比任何规则更擅长判断"什么信息重要"
 
-## 10. 安全机制
+**但这不是没有代价的**：L1 丢弃的消息可能包含关键的"为什么做了这个决策"的上下文。如果 LLM 在中间某轮做了一个非直觉的选择（比如切换了 API 端点），L1 裁剪可能导致后续的 LLM 调用不知道这个选择的原因。v5 的记忆系统部分缓解了这个问题——关键决策可以被提取为持久记忆，在压缩后仍然可用。
 
-### 10.1 命令过滤 (`permission_hook`)
+### 7.2 日志系统的"可扩展性边界"
 
-**Deny List（直接阻断）：**
-`rm -rf /`、`sudo`、`shutdown`、`reboot`、`mkfs`、`dd if=`
+v4 的日志系统解决了"看到什么"的问题，但没有解决"看到多少"和"看到后怎么办"的问题：
 
-**Destructive List（交互确认）：**
-`rm `、`> /etc/`、`chmod 777`
+**日志量膨胀**：在一个活跃的 Agent 会话中，日志输出可能每秒数十条。对于长时间运行的任务，日志量可能变得难以阅读。真实的 Claude Code 通过日志级别（debug/info/warn/error）过滤和滚动缓冲区解决这个问题。
 
-### 10.2 路径安全
-
-`safe_path()` 函数确保所有文件操作都在工作区内：
-```python
-path = (WORKDIR / p).resolve()
-if not path.is_relative_to(WORKDIR):
-    raise ValueError(f"Path escapes workspace: {p}")
-```
-
-### 10.3 工作区外写入检查
-
-`write_file` 和 `edit_file` 工具在写入前检查路径是否在工作区内，超出时需要用户交互确认。
-
----
-
-## 11. 典型运行示例
-
-```
-输入问题，回车发送。输入 q 退出。
-
-[STARTUP] config: workdir=D:\project, model=deepseek-v4-flash, max_tokens=8000
-[STARTUP] llm: base_url=https://api.deepseek.com/anthropic
-[STARTUP] tools: registered=['bash', 'read_file', 'write_file', 'edit_file', 'glob', 'compact', 'spawn_subagent']
-[STARTUP] system_prompt: chars=456
-[SKILL] scan_start: dir=D:\project\skill
-[SKILL] loaded: name=code_review, chars=1200
-[SKILL] loaded: name=data_analysis, chars=980
-[SKILL] scan_done: total=4
-
-s03 >> 帮我看看 main.py 的代码结构
-
-[SESSION] round_start: round=1, input=帮我看看 main.py 的代码结构
-[SESSION] prompt: workdir=D:\project
-[ITERATION] start: iteration=1, messages=1
-[API] response: elapsed=1.85s, stop_reason=tool_use, text_blocks=1, tool_blocks=1, input_tokens=1200, output_tokens=150
-[TOOL] start: name=read_file, id=toolu_01abc, args=['main.py', None]
-[TOOL] end: name=read_file, elapsed=0.01s, output=2340 chars, rc=
-[ITERATION] end: iteration=1, tool_results=1
-[ITERATION] start: iteration=2, messages=3
-[API] response: elapsed=2.31s, stop_reason=end_turn, text_blocks=1, tool_blocks=0, input_tokens=3500, output_tokens=400
-[SESSION] agent_finished: stop_reason=end_turn
-[SESSION] stop: tool_calls=1
-
-（Agent 的文本回复输出到这里）
-```
+**日志与恢复的脱节**：v4 的日志记录了错误，但不会根据日志内容触发恢复操作。v5 的恢复系统填补了这个缺口——但两者仍然是独立的系统。理想的架构是日志系统发出"严重级别"事件，恢复系统订阅这些事件并自动触发恢复，实现可观测性到自动修复的闭环。

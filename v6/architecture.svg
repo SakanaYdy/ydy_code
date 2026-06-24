@@ -1,0 +1,152 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 920 580">
+  <defs>
+    <marker id="a" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <polygon points="0 0, 8 3, 0 6" fill="#2980B9"/>
+    </marker>
+    <marker id="ag" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <polygon points="0 0, 8 3, 0 6" fill="#27AE60"/>
+    </marker>
+    <filter id="sh"><feDropShadow dx="1.5" dy="1.5" stdDeviation="2" flood-color="#00000012"/></filter>
+    <linearGradient id="hd"><stop offset="0%" stop-color="#2C3E50"/><stop offset="100%" stop-color="#34495E"/></linearGradient>
+    <linearGradient id="task"><stop offset="0%" stop-color="#1A5276"/><stop offset="100%" stop-color="#154360"/></linearGradient>
+    <linearGradient id="bg"><stop offset="0%" stop-color="#6C3483"/><stop offset="100%" stop-color="#4A235A"/></linearGradient>
+  </defs>
+
+  <rect width="920" height="580" fill="#FFFFFF" rx="8"/>
+
+  <!-- Title -->
+  <rect x="0" y="0" width="920" height="42" fill="url(#hd)" rx="8"/>
+  <rect x="0" y="21" width="920" height="21" fill="url(#hd)"/>
+  <text x="460" y="27" text-anchor="middle" fill="#FFF" font-family="Arial" font-size="16" font-weight="bold">Agent v6 — 任务依赖图 + 后台异步执行</text>
+
+  <!-- ===== LEFT: agent_loop ===== -->
+  <rect x="12" y="52" width="480" height="520" rx="6" fill="#F8F9FA" stroke="#BDC3C7" stroke-width="1.5"/>
+  <text x="28" y="72" fill="#34495E" font-family="Arial" font-size="13" font-weight="bold">agent_loop — 带后台执行的主循环</text>
+
+  <rect x="170" y="84" width="140" height="24" rx="4" fill="#34495E"/>
+  <text x="240" y="101" text-anchor="middle" fill="#FFF" font-family="Arial" font-size="10" font-weight="bold">记忆→压缩→LLM</text>
+  <line x1="240" y1="108" x2="240" y2="128" stroke="#2980B9" stroke-width="1.5" marker-end="url(#a)"/>
+
+  <!-- tool_use dispatch -->
+  <rect x="130" y="132" width="220" height="24" rx="4" fill="#D4E6F1" stroke="#5DADE2"/>
+  <text x="240" y="149" text-anchor="middle" fill="#1A5276" font-family="Arial" font-size="10" font-weight="bold">tool_use 响应</text>
+  <line x1="240" y1="156" x2="240" y2="178" stroke="#2980B9" stroke-width="1.5"/>
+  <line x1="240" y1="178" x2="120" y2="178" stroke="#2980B9" stroke-width="1.5"/>
+  <line x1="240" y1="178" x2="360" y2="178" stroke="#2980B9" stroke-width="1.5"/>
+
+  <!-- Background judgment -->
+  <rect x="28" y="140" width="100" height="50" rx="5" fill="#FDEBD0" stroke="#F0B27A"/>
+  <text x="78" y="158" text-anchor="middle" fill="#7E5109" font-family="Arial" font-size="9" font-weight="bold">后台判断</text>
+  <text x="78" y="174" text-anchor="middle" fill="#7F8C8D" font-family="Arial" font-size="7">should_run_</text>
+  <text x="78" y="184" text-anchor="middle" fill="#7F8C8D" font-family="Arial" font-size="7">background()</text>
+
+  <line x1="78" y1="178" x2="100" y2="178" stroke="#E67E22" stroke-width="1"/>
+
+  <!-- Background branch -->
+  <line x1="120" y1="178" x2="120" y2="205" stroke="#6C3483" stroke-width="1.5" marker-end="url(#a)"/>
+  <rect x="28" y="210" width="184" height="56" rx="5" fill="#F4ECF7" stroke="#AF7AC5" filter="url(#sh)"/>
+  <text x="120" y="228" text-anchor="middle" fill="#6C3483" font-family="Arial" font-size="9" font-weight="bold">后台执行</text>
+  <text x="120" y="244" text-anchor="middle" fill="#7F8C8D" font-family="Arial" font-size="7">daemon线程 → handler()</text>
+  <text x="120" y="258" text-anchor="middle" fill="#7F8C8D" font-family="Arial" font-size="7">返回占位符 tool_result</text>
+
+  <!-- Sync branch -->
+  <line x1="360" y1="178" x2="360" y2="205" stroke="#27AE60" stroke-width="1.5" marker-end="url(#a)"/>
+  <rect x="280" y="210" width="160" height="56" rx="5" fill="#D5F5E3" stroke="#82E0AA" filter="url(#sh)"/>
+  <text x="360" y="228" text-anchor="middle" fill="#1E8449" font-family="Arial" font-size="9" font-weight="bold">同步执行</text>
+  <text x="360" y="244" text-anchor="middle" fill="#7F8C8D" font-family="Arial" font-size="7">handler() → 直接返回</text>
+  <text x="360" y="258" text-anchor="middle" fill="#7F8C8D" font-family="Arial" font-size="7">完整 tool_result</text>
+
+  <!-- Collect background results -->
+  <line x1="120" y1="266" x2="120" y2="290" stroke="#6C3483" stroke-width="1.5"/>
+  <line x1="360" y1="266" x2="360" y2="290" stroke="#27AE60" stroke-width="1.5"/>
+  <line x1="120" y1="290" x2="360" y2="290" stroke="#2980B9" stroke-width="1.5"/>
+  <line x1="240" y1="290" x2="240" y2="312" stroke="#2980B9" stroke-width="1.5" marker-end="url(#a)"/>
+
+  <rect x="100" y="316" width="280" height="50" rx="5" fill="#EBF5FB" stroke="#85C1E9" filter="url(#sh)"/>
+  <text x="240" y="334" text-anchor="middle" fill="#1A5276" font-family="Arial" font-size="9" font-weight="bold">collect_bg_results() — 合并结果</text>
+  <text x="240" y="350" text-anchor="middle" fill="#7F8C8D" font-family="Arial" font-size="8">&lt;task_notification&gt; 注入到下一轮 user message</text>
+
+  <!-- Notification format -->
+  <rect x="30" y="380" width="420" height="55" rx="4" fill="#F8F9FA" stroke="#D5D8DC"/>
+  <text x="240" y="396" text-anchor="middle" fill="#7F8C8D" font-family="Arial" font-size="8" font-weight="bold">通知格式 (不复用原始tool_use_id):</text>
+  <text x="240" y="414" text-anchor="middle" fill="#2C3E50" font-family="Consolas,monospace" font-size="7">&lt;task_notification&gt; &lt;task_id&gt;bg_0001&lt;/task_id&gt; &lt;status&gt;completed&lt;/status&gt; ...</text>
+  <text x="240" y="428" text-anchor="middle" fill="#7F8C8D" font-family="Arial" font-size="7">一个tool_use只能对应一个tool_result → 后台完成是独立事件</text>
+
+  <!-- Slow keywords -->
+  <rect x="28" y="448" width="440" height="40" rx="4" fill="#FDEDEC" stroke="#E74C3C"/>
+  <text x="248" y="464" text-anchor="middle" fill="#922B21" font-family="Arial" font-size="9" font-weight="bold">慢操作关键词 (启发式fallback):</text>
+  <text x="248" y="480" text-anchor="middle" fill="#2C3E50" font-family="Arial" font-size="8">install | build | test | deploy | compile | docker | pip install | npm install | make</text>
+
+  <!-- ===== RIGHT TOP: Task System ===== -->
+  <rect x="508" y="52" width="398" height="290" rx="6" fill="#EBF5FB" stroke="#85C1E9" stroke-width="1.5"/>
+  <rect x="508" y="52" width="398" height="24" rx="6" fill="url(#task)"/>
+  <rect x="508" y="66" width="398" height="10" fill="url(#task)"/>
+  <text x="707" y="69" text-anchor="middle" fill="#FFF" font-family="Arial" font-size="11" font-weight="bold">task_system.py — 持久化任务依赖图</text>
+
+  <!-- DAG visualization -->
+  <text x="524" y="94" fill="#1A5276" font-family="Arial" font-size="10" font-weight="bold">任务 DAG (有向无环图):</text>
+
+  <!-- Task nodes -->
+  <rect x="530" y="104" width="100" height="32" rx="4" fill="#D5F5E3" stroke="#82E0AA"/>
+  <text x="580" y="118" text-anchor="middle" fill="#1E8449" font-family="Arial" font-size="8" font-weight="bold">Setup DB</text>
+  <text x="580" y="130" text-anchor="middle" fill="#7F8C8D" font-family="Arial" font-size="6">completed</text>
+
+  <line x1="630" y1="120" x2="665" y2="120" stroke="#27AE60" stroke-width="1.5" marker-end="url(#ag)"/>
+
+  <rect x="670" y="104" width="100" height="32" rx="4" fill="#FCF3CF" stroke="#F1C40F"/>
+  <text x="720" y="118" text-anchor="middle" fill="#7D6608" font-family="Arial" font-size="8" font-weight="bold">API Module</text>
+  <text x="720" y="130" text-anchor="middle" fill="#7F8C8D" font-family="Arial" font-size="6">in_progress</text>
+
+  <line x1="630" y1="128" x2="665" y2="155" stroke="#2980B9" stroke-width="1" marker-end="url(#a)"/>
+
+  <rect x="670" y="155" width="100" height="32" rx="4" fill="#F2F3F4" stroke="#BDC3C7"/>
+  <text x="720" y="169" text-anchor="middle" fill="#7F8C8D" font-family="Arial" font-size="8" font-weight="bold">UI Layer</text>
+  <text x="720" y="181" text-anchor="middle" fill="#7F8C8D" font-family="Arial" font-size="6">pending (blocked)</text>
+
+  <text x="720" y="155" text-anchor="middle" fill="#E74C3C" font-family="Arial" font-size="6">blockedBy</text>
+
+  <!-- Task data structure -->
+  <text x="524" y="208" fill="#1A5276" font-family="Arial" font-size="10" font-weight="bold">Task数据结构:</text>
+  <rect x="524" y="216" width="368" height="55" rx="3" fill="#F8F9FA" stroke="#D5D8DC"/>
+  <text x="534" y="232" fill="#2C3E50" font-family="Consolas,monospace" font-size="8">@dataclass class Task:</text>
+  <text x="534" y="246" fill="#2C3E50" font-family="Consolas,monospace" font-size="8">  id: str | subject: str | description: str | status: str</text>
+  <text x="534" y="260" fill="#2C3E50" font-family="Consolas,monospace" font-size="8">  owner: str|None | blockedBy: list  (依赖任务ID列表)</text>
+
+  <!-- State machine -->
+  <text x="524" y="286" fill="#1A5276" font-family="Arial" font-size="10" font-weight="bold">状态机:</text>
+  <rect x="524" y="294" width="176" height="40" rx="4" fill="#F8F9FA" stroke="#D5D8DC"/>
+  <text x="612" y="310" text-anchor="middle" fill="#2C3E50" font-family="Arial" font-size="9">pending → claim → in_progress</text>
+  <text x="612" y="326" text-anchor="middle" fill="#2C3E50" font-family="Arial" font-size="9">in_progress → complete → completed</text>
+
+  <!-- ===== RIGHT BOTTOM: Comparison ===== -->
+  <rect x="508" y="356" width="398" height="146" rx="6" fill="#F8F9FA" stroke="#BDC3C7" stroke-width="1.5"/>
+  <text x="707" y="376" text-anchor="middle" fill="#2C3E50" font-family="Arial" font-size="11" font-weight="bold">任务系统 vs TodoWrite</text>
+
+  <rect x="520" y="388" width="372" height="105" rx="3" fill="#FAFAFA" stroke="#E5E7E9"/>
+  <!-- Table header -->
+  <rect x="520" y="388" width="124" height="20" fill="#34495E"/>
+  <text x="582" y="402" text-anchor="middle" fill="#FFF" font-family="Arial" font-size="8">维度</text>
+  <rect x="644" y="388" width="124" height="20" fill="#D5F5E3"/>
+  <text x="706" y="402" text-anchor="middle" fill="#1E8449" font-family="Arial" font-size="8">Task System (DAG)</text>
+  <rect x="768" y="388" width="124" height="20" fill="#FADBD8"/>
+  <text x="830" y="402" text-anchor="middle" fill="#922B21" font-family="Arial" font-size="8">TodoWrite (内存)</text>
+
+  <text x="582" y="420" text-anchor="middle" fill="#2C3E50" font-family="Arial" font-size="8">存储</text>
+  <text x="706" y="420" text-anchor="middle" fill="#1E8449" font-family="Arial" font-size="8">.tasks/{id}.json</text>
+  <text x="830" y="420" text-anchor="middle" fill="#922B21" font-family="Arial" font-size="8">进程内</text>
+
+  <text x="582" y="437" text-anchor="middle" fill="#2C3E50" font-family="Arial" font-size="8">依赖</text>
+  <text x="706" y="437" text-anchor="middle" fill="#1E8449" font-family="Arial" font-size="8">blockedBy 图</text>
+  <text x="830" y="437" text-anchor="middle" fill="#922B21" font-family="Arial" font-size="8">无</text>
+
+  <text x="582" y="454" text-anchor="middle" fill="#2C3E50" font-family="Arial" font-size="8">生命周期</text>
+  <text x="706" y="454" text-anchor="middle" fill="#1E8449" font-family="Arial" font-size="8">跨会话</text>
+  <text x="830" y="454" text-anchor="middle" fill="#922B21" font-family="Arial" font-size="8">当前会话</text>
+
+  <text x="582" y="471" text-anchor="middle" fill="#2C3E50" font-family="Arial" font-size="8">解锁</text>
+  <text x="706" y="471" text-anchor="middle" fill="#1E8449" font-family="Arial" font-size="8">自动报告</text>
+  <text x="830" y="471" text-anchor="middle" fill="#922B21" font-family="Arial" font-size="8">手动</text>
+
+  <rect x="508" y="510" width="398" height="20" rx="3" fill="#E8DAEF"/>
+  <text x="707" y="524" text-anchor="middle" fill="#6C3483" font-family="Arial" font-size="8">v5→v6: 工具 7→12 (+5任务工具) | 模块 11→12 | 理论基础: DAG + 非阻塞I/O</text>
+</svg>

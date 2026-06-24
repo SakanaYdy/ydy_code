@@ -1,0 +1,127 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 580">
+  <defs>
+    <marker id="arr" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <polygon points="0 0, 8 3, 0 6" fill="#2980B9"/>
+    </marker>
+    <marker id="arrRed" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <polygon points="0 0, 8 3, 0 6" fill="#E74C3C"/>
+    </marker>
+    <filter id="sh"><feDropShadow dx="1.5" dy="1.5" stdDeviation="2" flood-color="#00000018"/></filter>
+    <linearGradient id="hdr"><stop offset="0%" stop-color="#2C3E50"/><stop offset="100%" stop-color="#34495E"/></linearGradient>
+    <linearGradient id="hookGrad"><stop offset="0%" stop-color="#8E44AD"/><stop offset="100%" stop-color="#6C3483"/></linearGradient>
+    <linearGradient id="skillGrad"><stop offset="0%" stop-color="#16A085"/><stop offset="100%" stop-color="#0E6655"/></linearGradient>
+  </defs>
+
+  <rect width="880" height="580" fill="#FFFFFF" rx="8"/>
+
+  <!-- Title -->
+  <rect x="0" y="0" width="880" height="44" fill="url(#hdr)" rx="8"/>
+  <rect x="0" y="22" width="880" height="22" fill="url(#hdr)"/>
+  <text x="440" y="28" text-anchor="middle" fill="#FFFFFF" font-family="Arial" font-size="17" font-weight="bold">Agent v2 — Hook生命周期 + 技能系统</text>
+
+  <!-- ===== LEFT SIDE: agent_loop ===== -->
+  <rect x="15" y="56" width="500" height="510" rx="6" fill="#F8F9FA" stroke="#BDC3C7" stroke-width="1.5"/>
+  <text x="35" y="76" fill="#34495E" font-family="Arial" font-size="13" font-weight="bold">main.py · agent_loop (纯编排层)</text>
+
+  <!-- User Input -->
+  <rect x="170" y="90" width="180" height="32" rx="5" fill="#34495E" filter="url(#sh)"/>
+  <text x="260" y="111" text-anchor="middle" fill="#FFF" font-family="Arial" font-size="12" font-weight="bold">用户输入</text>
+  <line x1="260" y1="122" x2="260" y2="142" stroke="#2980B9" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <!-- Hook: UserPromptSubmit -->
+  <rect x="135" y="146" width="250" height="30" rx="5" fill="#F4ECF7" stroke="#AF7AC5" stroke-width="1.5" filter="url(#sh)"/>
+  <text x="260" y="166" text-anchor="middle" fill="#6C3483" font-family="Arial" font-size="11">⚓ Hook: UserPromptSubmit</text>
+  <line x1="260" y1="176" x2="260" y2="196" stroke="#2980B9" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <!-- Skill build_system -->
+  <rect x="135" y="200" width="250" height="30" rx="5" fill="#E8F8F5" stroke="#1ABC9C" stroke-width="1.5" filter="url(#sh)"/>
+  <text x="260" y="220" text-anchor="middle" fill="#0E6655" font-family="Arial" font-size="11">📚 skill.build_system() → system prompt</text>
+  <line x1="260" y1="230" x2="260" y2="250" stroke="#2980B9" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <!-- LLM API -->
+  <rect x="170" y="254" width="180" height="32" rx="5" fill="#D4E6F1" stroke="#5DADE2" filter="url(#sh)"/>
+  <text x="260" y="275" text-anchor="middle" fill="#1A5276" font-family="Arial" font-size="12" font-weight="bold">LLM API 调用</text>
+
+  <!-- Split -->
+  <line x1="260" y1="286" x2="260" y2="310" stroke="#2980B9" stroke-width="1.5"/>
+  <line x1="260" y1="310" x2="120" y2="310" stroke="#27AE60" stroke-width="1.5"/>
+  <line x1="120" y1="310" x2="120" y2="330" stroke="#27AE60" stroke-width="1.5" marker-end="url(#arr)"/>
+  <line x1="260" y1="310" x2="400" y2="310" stroke="#E74C3C" stroke-width="1.5"/>
+  <line x1="400" y1="310" x2="400" y2="330" stroke="#E74C3C" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <!-- tool_use branch -->
+  <rect x="45" y="335" width="150" height="40" rx="5" fill="#D5F5E3" stroke="#82E0AA" filter="url(#sh)"/>
+  <text x="120" y="353" text-anchor="middle" fill="#1E8449" font-family="Arial" font-size="11" font-weight="bold">tool_use</text>
+  <text x="120" y="368" text-anchor="middle" fill="#7F8C8D" font-family="Arial" font-size="9">触发工具执行</text>
+  <line x1="120" y1="375" x2="120" y2="400" stroke="#2980B9" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <!-- Hook: PreToolUse -->
+  <rect x="30" y="404" width="180" height="30" rx="5" fill="#F4ECF7" stroke="#AF7AC5" stroke-width="1.5" filter="url(#sh)"/>
+  <text x="120" y="424" text-anchor="middle" fill="#6C3483" font-family="Arial" font-size="11">⚓ Hook: PreToolUse</text>
+  <line x1="120" y1="434" x2="120" y2="458" stroke="#2980B9" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <!-- handler -->
+  <rect x="45" y="462" width="150" height="30" rx="5" fill="#D4E6F1" stroke="#5DADE2" filter="url(#sh)"/>
+  <text x="120" y="482" text-anchor="middle" fill="#1A5276" font-family="Arial" font-size="11" font-weight="bold">handler(**input)</text>
+  <line x1="120" y1="492" x2="120" y2="515" stroke="#2980B9" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <!-- Hook: PostToolUse -->
+  <rect x="30" y="519" width="180" height="30" rx="5" fill="#F4ECF7" stroke="#AF7AC5" stroke-width="1.5" filter="url(#sh)"/>
+  <text x="120" y="539" text-anchor="middle" fill="#6C3483" font-family="Arial" font-size="11">⚓ Hook: PostToolUse</text>
+
+  <!-- end_turn branch -->
+  <rect x="330" y="335" width="140" height="40" rx="5" fill="#FADBD8" stroke="#F1948A" filter="url(#sh)"/>
+  <text x="400" y="353" text-anchor="middle" fill="#922B21" font-family="Arial" font-size="11" font-weight="bold">end_turn</text>
+  <text x="400" y="368" text-anchor="middle" fill="#7F8C8D" font-family="Arial" font-size="9">输出文本 + 退出</text>
+
+  <!-- Return arrow from tool back to LLM -->
+  <line x1="240" y1="486" x2="440" y2="486" stroke="#2980B9" stroke-width="1" stroke-dasharray="4,3"/>
+  <line x1="440" y1="486" x2="440" y2="270" stroke="#2980B9" stroke-width="1" stroke-dasharray="4,3"/>
+  <text x="370" y="500" text-anchor="start" fill="#7F8C8D" font-family="Arial" font-size="8">tool_result → 回到LLM</text>
+
+  <!-- ===== RIGHT SIDE: Hook System ===== -->
+  <rect x="540" y="56" width="325" height="245" rx="6" fill="#F4ECF7" stroke="#AF7AC5" stroke-width="1.5"/>
+  <rect x="540" y="56" width="325" height="26" rx="6" fill="url(#hookGrad)"/>
+  <rect x="540" y="70" width="325" height="12" fill="url(#hookGrad)"/>
+  <text x="702" y="74" text-anchor="middle" fill="#FFF" font-family="Arial" font-size="12" font-weight="bold">hook.py — Hook 注册表 + 触发</text>
+
+  <text x="555" y="100" fill="#6C3483" font-family="Arial" font-size="10" font-weight="bold">HOOKS 注册表:</text>
+  <rect x="555" y="106" width="295" height="18" rx="3" fill="#E8DAEF"/>
+  <text x="563" y="119" fill="#4A235A" font-family="Consolas,monospace" font-size="9">UserPromptSubmit | PreToolUse | PostToolUse | Stop</text>
+
+  <text x="555" y="142" fill="#6C3483" font-family="Arial" font-size="10" font-weight="bold">返回值语义:</text>
+  <rect x="555" y="148" width="295" height="18" rx="3" fill="#FDEDEC"/>
+  <text x="563" y="161" fill="#922B21" font-family="Arial" font-size="9">None=放行 | str(PreToolUse)=阻断 | str(Stop)=续循环</text>
+
+  <text x="555" y="182" fill="#6C3483" font-family="Arial" font-size="10" font-weight="bold">已注册 Handler:</text>
+  <rect x="555" y="188" width="295" height="100" rx="3" fill="#F8F9FA" stroke="#D5D8DC"/>
+  <text x="565" y="202" fill="#2C3E50" font-family="Consolas,monospace" font-size="9">✓ permission_hook  →  PreToolUse  (可阻断)</text>
+  <text x="565" y="216" fill="#2C3E50" font-family="Consolas,monospace" font-size="9">✓ log_hook          →  PreToolUse  (纯观察)</text>
+  <text x="565" y="230" fill="#2C3E50" font-family="Consolas,monospace" font-size="9">✓ large_output_hook →  PostToolUse (纯观察)</text>
+  <text x="565" y="244" fill="#2C3E50" font-family="Consolas,monospace" font-size="9">✓ context_inject_hook → UserPromptSubmit</text>
+  <text x="565" y="258" fill="#2C3E50" font-family="Consolas,monospace" font-size="9">✓ summary_hook      →  Stop        (纯观察)</text>
+
+  <!-- ===== RIGHT BOTTOM: Skill System ===== -->
+  <rect x="540" y="315" width="325" height="250" rx="6" fill="#E8F8F5" stroke="#1ABC9C" stroke-width="1.5"/>
+  <rect x="540" y="315" width="325" height="26" rx="6" fill="url(#skillGrad)"/>
+  <rect x="540" y="329" width="325" height="12" fill="url(#skillGrad)"/>
+  <text x="702" y="333" text-anchor="middle" fill="#FFF" font-family="Arial" font-size="12" font-weight="bold">skill.py — 动态技能系统</text>
+
+  <text x="555" y="358" fill="#0E6655" font-family="Arial" font-size="10" font-weight="bold">技能目录 (skill/):</text>
+  <rect x="555" y="364" width="295" height="85" rx="3" fill="#F8F9FA" stroke="#D5D8DC"/>
+  <text x="565" y="378" fill="#2C3E50" font-family="Consolas,monospace" font-size="9">📁 code_review/SKILL.md    审查规则</text>
+  <text x="565" y="392" fill="#2C3E50" font-family="Consolas,monospace" font-size="9">📁 data_analysis/SKILL.md  分析模式</text>
+  <text x="565" y="406" fill="#2C3E50" font-family="Consolas,monospace" font-size="9">📁 debug_helper/SKILL.md   调试流程</text>
+  <text x="565" y="420" fill="#2C3E50" font-family="Consolas,monospace" font-size="9">📁 translate/SKILL.md       翻译规则</text>
+
+  <text x="555" y="466" fill="#0E6655" font-family="Arial" font-size="10" font-weight="bold">加载流程:</text>
+  <rect x="555" y="472" width="295" height="85" rx="3" fill="#F8F9FA" stroke="#D5D8DC"/>
+  <text x="565" y="488" fill="#2C3E50" font-family="Arial" font-size="9">① _scan_skills()  遍历子目录 → 检查 SKILL.md</text>
+  <text x="565" y="504" fill="#2C3E50" font-family="Arial" font-size="9">② _parse_frontmatter()  分割YAML → 提取meta+body</text>
+  <text x="565" y="520" fill="#2C3E50" font-family="Arial" font-size="9">③ build_system()  基础prompt + "Available skills: ..."</text>
+  <text x="565" y="536" fill="#2C3E50" font-family="Arial" font-size="9">④ 注入到 system prompt → LLM 可按需选择技能</text>
+
+  <!-- Design theory badge -->
+  <rect x="540" y="516" width="325" height="20" rx="4" fill="#D4EFDF" stroke="#82E0AA"/>
+  <text x="702" y="531" text-anchor="middle" fill="#1E8449" font-family="Arial" font-size="9" font-style="italic">理论基础: 关注点分离 + 开闭原则</text>
+</svg>

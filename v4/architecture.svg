@@ -1,0 +1,178 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 920 680">
+  <defs>
+    <marker id="a" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <polygon points="0 0, 8 3, 0 6" fill="#2980B9"/>
+    </marker>
+    <marker id="ag" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <polygon points="0 0, 8 3, 0 6" fill="#27AE60"/>
+    </marker>
+    <filter id="sh"><feDropShadow dx="1.5" dy="1.5" stdDeviation="2" flood-color="#00000012"/></filter>
+    <linearGradient id="hd"><stop offset="0%" stop-color="#2C3E50"/><stop offset="100%" stop-color="#34495E"/></linearGradient>
+  </defs>
+
+  <rect width="920" height="680" fill="#FFFFFF" rx="8"/>
+
+  <!-- Title -->
+  <rect x="0" y="0" width="920" height="42" fill="url(#hd)" rx="8"/>
+  <rect x="0" y="21" width="920" height="21" fill="url(#hd)"/>
+  <text x="460" y="27" text-anchor="middle" fill="#FFFFFF" font-family="Arial" font-size="16" font-weight="bold">Agent v4 — 统一日志 + 4级上下文压缩管线</text>
+
+  <!-- ===== LEFT: agent_loop with compression ===== -->
+  <rect x="12" y="52" width="480" height="620" rx="6" fill="#F8F9FA" stroke="#BDC3C7" stroke-width="1.5"/>
+  <text x="28" y="72" fill="#34495E" font-family="Arial" font-size="13" font-weight="bold">agent_loop — 主循环流程</text>
+
+  <!-- User input -->
+  <rect x="160" y="84" width="160" height="30" rx="5" fill="#34495E" filter="url(#sh)"/>
+  <text x="240" y="104" text-anchor="middle" fill="#FFF" font-family="Arial" font-size="11" font-weight="bold">用户输入</text>
+  <line x1="240" y1="114" x2="240" y2="138" stroke="#2980B9" stroke-width="1.5" marker-end="url(#a)"/>
+
+  <!-- Compression Pipeline box -->
+  <rect x="28" y="142" width="424" height="210" rx="6" fill="#E8F8F5" stroke="#1ABC9C" stroke-width="2"/>
+  <text x="240" y="162" text-anchor="middle" fill="#0E6655" font-family="Arial" font-size="12" font-weight="bold">上下文压缩管线 (compact.py)</text>
+
+  <!-- Level 3 -->
+  <rect x="42" y="172" width="395" height="38" rx="5" fill="#D5F5E3" stroke="#82E0AA" filter="url(#sh)"/>
+  <text x="240" y="188" text-anchor="middle" fill="#1E8449" font-family="Arial" font-size="10" font-weight="bold">L3: tool_result_budget() — 大结果落盘</text>
+  <text x="240" y="203" text-anchor="middle" fill="#7F8C8D" font-family="Arial" font-size="8">触发: 结果 &gt; 2048字符 | 动作: 写入 ./tool_results/ + 截断 + 文件路径引用</text>
+
+  <!-- Level 1 -->
+  <rect x="42" y="216" width="395" height="38" rx="5" fill="#D5F5E3" stroke="#82E0AA" filter="url(#sh)"/>
+  <text x="240" y="232" text-anchor="middle" fill="#1E8449" font-family="Arial" font-size="10" font-weight="bold">L1: snip_compact() — 消息裁剪</text>
+  <text x="240" y="247" text-anchor="middle" fill="#7F8C8D" font-family="Arial" font-size="8">触发: 消息数 &gt; 20 | 动作: 保留前10+后10, 丢弃中间</text>
+
+  <!-- Level 2 -->
+  <rect x="42" y="260" width="395" height="38" rx="5" fill="#D5F5E3" stroke="#82E0AA" filter="url(#sh)"/>
+  <text x="240" y="276" text-anchor="middle" fill="#1E8449" font-family="Arial" font-size="10" font-weight="bold">L2: micro_compact() — 旧结果压缩</text>
+  <text x="240" y="291" text-anchor="middle" fill="#7F8C8D" font-family="Arial" font-size="8">触发: 工具结果 &gt; 5个 | 动作: 旧的替换为占位符, 保留最新5个</text>
+
+  <!-- Level 0 -->
+  <rect x="42" y="304" width="395" height="38" rx="5" fill="#FDEBD0" stroke="#F0B27A" filter="url(#sh)"/>
+  <text x="240" y="320" text-anchor="middle" fill="#7E5109" font-family="Arial" font-size="10" font-weight="bold">L0: compact_history() — LLM摘要</text>
+  <text x="240" y="335" text-anchor="middle" fill="#7F8C8D" font-family="Arial" font-size="8">触发: 序列化&gt;50K字符 | 动作: 1次LLM摘要 + 完整记录写入 ./transcripts/</text>
+
+  <!-- Auto-trigger note -->
+  <rect x="80" y="324" width="320" height="16" rx="3" fill="#EBF5FB"/>
+  <text x="240" y="336" text-anchor="middle" fill="#2980B9" font-family="Arial" font-size="8">⚡ 每轮循环自动运行 · 前3级纯本地 · L0需1次LLM调用</text>
+
+  <!-- Arrow out of compression -->
+  <line x1="240" y1="352" x2="240" y2="378" stroke="#2980B9" stroke-width="1.5" marker-end="url(#a)"/>
+
+  <!-- LLM API -->
+  <rect x="155" y="382" width="170" height="32" rx="5" fill="#D4E6F1" stroke="#5DADE2" filter="url(#sh)"/>
+  <text x="240" y="403" text-anchor="middle" fill="#1A5276" font-family="Arial" font-size="11" font-weight="bold">LLM API 调用</text>
+
+  <!-- Split -->
+  <line x1="240" y1="414" x2="240" y2="435" stroke="#2980B9" stroke-width="1.5"/>
+  <line x1="240" y1="435" x2="120" y2="435" stroke="#27AE60" stroke-width="1.5"/>
+  <line x1="120" y1="435" x2="120" y2="450" stroke="#27AE60" stroke-width="1.5" marker-end="url(#a)"/>
+  <line x1="240" y1="435" x2="360" y2="435" stroke="#E74C3C" stroke-width="1.5"/>
+  <line x1="360" y1="435" x2="360" y2="450" stroke="#E74C3C" stroke-width="1.5" marker-end="url(#a)"/>
+
+  <!-- tool_use -->
+  <rect x="42" y="455" width="156" height="40" rx="5" fill="#D5F5E3" stroke="#82E0AA" filter="url(#sh)"/>
+  <text x="120" y="473" text-anchor="middle" fill="#1E8449" font-family="Arial" font-size="10" font-weight="bold">tool_use</text>
+  <text x="120" y="488" text-anchor="middle" fill="#7F8C8D" font-family="Arial" font-size="8">触发工具执行</text>
+
+  <!-- end_turn -->
+  <rect x="300" y="455" width="120" height="40" rx="5" fill="#FADBD8" stroke="#F1948A" filter="url(#sh)"/>
+  <text x="360" y="473" text-anchor="middle" fill="#922B21" font-family="Arial" font-size="10" font-weight="bold">end_turn</text>
+  <text x="360" y="488" text-anchor="middle" fill="#7F8C8D" font-family="Arial" font-size="8">退出</text>
+
+  <!-- Tool flow -->
+  <line x1="120" y1="495" x2="120" y2="518" stroke="#2980B9" stroke-width="1.5" marker-end="url(#a)"/>
+
+  <!-- Hook auto-logging for tool -->
+  <rect x="28" y="522" width="200" height="70" rx="5" fill="#F4ECF7" stroke="#AF7AC5" filter="url(#sh)"/>
+  <text x="128" y="540" text-anchor="middle" fill="#6C3483" font-family="Arial" font-size="10" font-weight="bold">Hook 自动日志派发</text>
+  <text x="44" y="556" fill="#6C3483" font-family="Arial" font-size="8">PreToolUse → OnToolStart</text>
+  <text x="44" y="570" fill="#6C3483" font-family="Arial" font-size="8">handler(**input)</text>
+  <text x="44" y="584" fill="#6C3483" font-family="Arial" font-size="8">PostToolUse → OnToolEnd</text>
+
+  <!-- Return arrow -->
+  <line x1="228" y1="557" x2="400" y2="557" stroke="#2980B9" stroke-width="1" stroke-dasharray="4,3"/>
+  <line x1="400" y1="557" x2="400" y2="398" stroke="#2980B9" stroke-width="1" stroke-dasharray="4,3"/>
+  <text x="340" y="572" text-anchor="start" fill="#7F8C8D" font-family="Arial" font-size="7">tool_result → 回到LLM</text>
+
+  <!-- Emergency compact -->
+  <rect x="28" y="605" width="440" height="32" rx="5" fill="#FDEDEC" stroke="#E74C3C" filter="url(#sh)"/>
+  <text x="248" y="620" text-anchor="middle" fill="#922B21" font-family="Arial" font-size="10" font-weight="bold">应急压缩: emergency_compact() — API失败时LLM摘要 → 保留最近5条</text>
+  <text x="248" y="633" text-anchor="middle" fill="#7F8C8D" font-family="Arial" font-size="8">最后的兜底策略: 宁可丢失部分上下文, 也不让Agent完全卡死</text>
+
+  <!-- ===== RIGHT: Log System ===== -->
+  <rect x="508" y="52" width="398" height="310" rx="6" fill="#F4ECF7" stroke="#AF7AC5" stroke-width="1.5"/>
+  <text x="524" y="72" fill="#6C3483" font-family="Arial" font-size="13" font-weight="bold">log.py — 统一日志系统</text>
+
+  <rect x="520" y="84" width="370" height="30" rx="5" fill="#E8DAEF"/>
+  <text x="705" y="104" text-anchor="middle" fill="#4A235A" font-family="Consolas,monospace" font-size="10">log_event(category, event, **data)</text>
+
+  <!-- Color scheme -->
+  <text x="524" y="130" fill="#6C3483" font-family="Arial" font-size="11" font-weight="bold">颜色语义映射:</text>
+  <rect x="520" y="138" width="370" height="110" rx="4" fill="#F8F9FA" stroke="#D5D8DC"/>
+
+  <rect x="530" y="146" width="70" height="20" rx="3" fill="#ABB2B9"/>
+  <text x="565" y="160" text-anchor="middle" fill="#FFF" font-family="Arial" font-size="8">灰色</text>
+  <text x="610" y="160" fill="#7F8C8D" font-family="Arial" font-size="9">普通信息 (TOOL/API/COMPACT)</text>
+
+  <rect x="530" y="172" width="70" height="20" rx="3" fill="#F1C40F"/>
+  <text x="565" y="186" text-anchor="middle" fill="#FFF" font-family="Arial" font-size="8">黄色</text>
+  <text x="610" y="186" fill="#7F8C8D" font-family="Arial" font-size="9">警告 (大输出/破坏性命令/应急)</text>
+
+  <rect x="530" y="198" width="70" height="20" rx="3" fill="#E74C3C"/>
+  <text x="565" y="212" text-anchor="middle" fill="#FFF" font-family="Arial" font-size="8">红色</text>
+  <text x="610" y="212" fill="#7F8C8D" font-family="Arial" font-size="9">错误 (权限阻断/超时/异常)</text>
+
+  <rect x="530" y="224" width="70" height="20" rx="3" fill="#884EA0"/>
+  <text x="565" y="238" text-anchor="middle" fill="#FFF" font-family="Arial" font-size="8">洋红</text>
+  <text x="610" y="238" fill="#7F8C8D" font-family="Arial" font-size="9">子Agent事件</text>
+
+  <!-- Design principles -->
+  <text x="524" y="270" fill="#6C3483" font-family="Arial" font-size="11" font-weight="bold">设计原则:</text>
+  <rect x="520" y="278" width="370" height="75" rx="4" fill="#F8F9FA" stroke="#D5D8DC"/>
+  <text x="530" y="294" fill="#2C3E50" font-family="Arial" font-size="9">✓ 一致性: 所有日志格式统一 [CATEGORY] event: key=value</text>
+  <text x="530" y="310" fill="#2C3E50" font-family="Arial" font-size="9">✓ 可过滤: 通过category按模块过滤</text>
+  <text x="530" y="326" fill="#2C3E50" font-family="Arial" font-size="9">✓ 零侵入: 业务代码只调用log_event(), 工具日志由Hook自动派发</text>
+  <text x="530" y="342" fill="#2C3E50" font-family="Arial" font-size="9">✓ 自动触发: OnToolStart/OnToolEnd由trigger_hook内部自动派发</text>
+
+  <!-- ===== RIGHT BOTTOM: Compact Strategy ===== -->
+  <rect x="508" y="378" width="398" height="195" rx="6" fill="#E8F8F5" stroke="#1ABC9C" stroke-width="1.5"/>
+  <text x="524" y="398" fill="#0E6655" font-family="Arial" font-size="13" font-weight="bold">压缩策略对比</text>
+
+  <rect x="520" y="410" width="370" height="155" rx="4" fill="#F8F9FA" stroke="#D5D8DC"/>
+
+  <!-- Comparison table in SVG -->
+  <line x1="520" y1="430" x2="890" y2="430" stroke="#E5E7E9"/>
+  <text x="555" y="425" text-anchor="middle" fill="#7F8C8D" font-family="Arial" font-size="8" font-weight="bold">级别</text>
+  <text x="650" y="425" text-anchor="middle" fill="#7F8C8D" font-family="Arial" font-size="8" font-weight="bold">触发条件</text>
+  <text x="770" y="425" text-anchor="middle" fill="#7F8C8D" font-family="Arial" font-size="8" font-weight="bold">LLM调用</text>
+  <text x="850" y="425" text-anchor="middle" fill="#7F8C8D" font-family="Arial" font-size="8" font-weight="bold">类型</text>
+
+  <text x="555" y="445" text-anchor="middle" fill="#27AE60" font-family="Arial" font-size="9" font-weight="bold">L3</text>
+  <text x="650" y="445" text-anchor="middle" fill="#2C3E50" font-family="Arial" font-size="9">结果 &gt; 2048字符</text>
+  <text x="770" y="445" text-anchor="middle" fill="#2C3E50" font-family="Arial" font-size="9">0</text>
+  <text x="850" y="445" text-anchor="middle" fill="#2C3E50" font-family="Arial" font-size="9">无损</text>
+
+  <text x="555" y="463" text-anchor="middle" fill="#27AE60" font-family="Arial" font-size="9" font-weight="bold">L1</text>
+  <text x="650" y="463" text-anchor="middle" fill="#2C3E50" font-family="Arial" font-size="9">消息数 &gt; 20</text>
+  <text x="770" y="463" text-anchor="middle" fill="#2C3E50" font-family="Arial" font-size="9">0</text>
+  <text x="850" y="463" text-anchor="middle" fill="#2C3E50" font-family="Arial" font-size="9">有损</text>
+
+  <text x="555" y="481" text-anchor="middle" fill="#27AE60" font-family="Arial" font-size="9" font-weight="bold">L2</text>
+  <text x="650" y="481" text-anchor="middle" fill="#2C3E50" font-family="Arial" font-size="9">工具结果 &gt; 5个</text>
+  <text x="770" y="481" text-anchor="middle" fill="#2C3E50" font-family="Arial" font-size="9">0</text>
+  <text x="850" y="481" text-anchor="middle" fill="#2C3E50" font-family="Arial" font-size="9">有损</text>
+
+  <text x="555" y="499" text-anchor="middle" fill="#E67E22" font-family="Arial" font-size="9" font-weight="bold">L0</text>
+  <text x="650" y="499" text-anchor="middle" fill="#2C3E50" font-family="Arial" font-size="9">序列化 &gt; 50K字符</text>
+  <text x="770" y="499" text-anchor="middle" fill="#E74C3C" font-family="Arial" font-size="9">1</text>
+  <text x="850" y="499" text-anchor="middle" fill="#2C3E50" font-family="Arial" font-size="9">有损</text>
+
+  <line x1="520" y1="510" x2="890" y2="510" stroke="#E5E7E9"/>
+
+  <text x="530" y="530" fill="#2C3E50" font-family="Arial" font-size="9">✓ 渐进式: 每级压缩程度递增, 优先低成本方法</text>
+  <text x="530" y="546" fill="#2C3E50" font-family="Arial" font-size="9">✓ 可恢复: 被压缩内容写入磁盘, 需要时可回溯</text>
+  <text x="530" y="562" fill="#2C3E50" font-family="Arial" font-size="9">✓ 兜底: emergency_compact() 确保API失败后仍可继续</text>
+
+  <!-- v4 vs v3 badge -->
+  <rect x="508" y="585" width="398" height="20" rx="4" fill="#F2F3F4"/>
+  <text x="707" y="599" text-anchor="middle" fill="#7F8C8D" font-family="Arial" font-size="9">v3→v4: Hook点 4→6 (+OnToolStart/OnToolEnd) | 工具 6→7 (+compact) | 模块 7→9</text>
+</svg>

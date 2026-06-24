@@ -1,0 +1,113 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 620">
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#4A90D9"/>
+    </marker>
+    <linearGradient id="headerGrad" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#2C3E50"/><stop offset="100%" stop-color="#34495E"/>
+    </linearGradient>
+    <linearGradient id="mainBox" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#F8F9FA"/><stop offset="100%" stop-color="#E9ECEF"/>
+    </linearGradient>
+    <filter id="shadow" x="-3%" y="-3%" width="106%" height="106%">
+      <feDropShadow dx="2" dy="2" stdDeviation="3" flood-color="#00000022"/>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="800" height="620" fill="#FFFFFF" rx="8"/>
+
+  <!-- Title -->
+  <rect x="0" y="0" width="800" height="48" fill="url(#headerGrad)" rx="8"/>
+  <rect x="0" y="24" width="800" height="24" fill="url(#headerGrad)"/>
+  <text x="400" y="30" text-anchor="middle" fill="#FFFFFF" font-family="Arial, sans-serif" font-size="18" font-weight="bold">Agent v1 — 系统架构 (最简实现)</text>
+
+  <!-- main.py container -->
+  <rect x="20" y="60" width="760" height="540" rx="6" fill="url(#mainBox)" stroke="#BDC3C7" stroke-width="2"/>
+  <text x="40" y="82" fill="#34495E" font-family="Arial, sans-serif" font-size="14" font-weight="bold">main.py — 入口容器</text>
+
+  <!-- agent_loop container -->
+  <rect x="40" y="94" width="720" height="310" rx="5" fill="#EBF5FB" stroke="#85C1E9" stroke-width="1.5"/>
+  <text x="55" y="114" fill="#2E86C1" font-family="Arial, sans-serif" font-size="13" font-weight="bold">agent_loop — 主循环</text>
+
+  <!-- LLM 调用 -->
+  <rect x="60" y="128" width="170" height="50" rx="5" fill="#D4E6F1" stroke="#5DADE2" filter="url(#shadow)"/>
+  <text x="145" y="148" text-anchor="middle" fill="#1A5276" font-family="Arial, sans-serif" font-size="12" font-weight="bold">① LLM 调用</text>
+  <text x="145" y="165" text-anchor="middle" fill="#2C3E50" font-family="Arial, sans-serif" font-size="10">Anthropic Messages API</text>
+
+  <!-- Arrow LLM → Dispatch -->
+  <line x1="230" y1="153" x2="270" y2="153" stroke="#4A90D9" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- 响应分发 -->
+  <rect x="275" y="128" width="170" height="50" rx="5" fill="#FDEBD0" stroke="#F0B27A" filter="url(#shadow)"/>
+  <text x="360" y="148" text-anchor="middle" fill="#7E5109" font-family="Arial, sans-serif" font-size="12" font-weight="bold">② 响应分发</text>
+  <text x="360" y="165" text-anchor="middle" fill="#2C3E50" font-family="Arial, sans-serif" font-size="10">判断 stop_reason</text>
+
+  <!-- Split arrows from dispatch -->
+  <line x1="360" y1="178" x2="360" y2="205" stroke="#4A90D9" stroke-width="2"/>
+  <line x1="360" y1="205" x2="190" y2="205" stroke="#4A90D9" stroke-width="2"/>
+  <line x1="190" y1="205" x2="190" y2="225" stroke="#4A90D9" stroke-width="2" marker-end="url(#arrow)"/>
+  <line x1="360" y1="205" x2="530" y2="205" stroke="#E74C3C" stroke-width="2"/>
+  <line x1="530" y1="205" x2="530" y2="225" stroke="#E74C3C" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- tool_use branch -->
+  <rect x="100" y="230" width="180" height="45" rx="5" fill="#D5F5E3" stroke="#82E0AA" filter="url(#shadow)"/>
+  <text x="190" y="250" text-anchor="middle" fill="#1E8449" font-family="Arial, sans-serif" font-size="12" font-weight="bold">③ 工具执行分支</text>
+  <text x="190" y="267" text-anchor="middle" fill="#2C3E50" font-family="Arial, sans-serif" font-size="10">stop_reason = tool_use</text>
+
+  <!-- end_turn branch -->
+  <rect x="440" y="230" width="180" height="45" rx="5" fill="#FADBD8" stroke="#F1948A" filter="url(#shadow)"/>
+  <text x="530" y="250" text-anchor="middle" fill="#922B21" font-family="Arial, sans-serif" font-size="12" font-weight="bold">输出文本 → 退出</text>
+  <text x="530" y="267" text-anchor="middle" fill="#2C3E50" font-family="Arial, sans-serif" font-size="10">stop_reason = end_turn</text>
+
+  <!-- Arrow from tool_use down -->
+  <line x1="190" y1="275" x2="190" y2="300" stroke="#4A90D9" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- 权限检查 -->
+  <rect x="110" y="305" width="160" height="42" rx="5" fill="#FCF3CF" stroke="#F1C40F" filter="url(#shadow)"/>
+  <text x="190" y="323" text-anchor="middle" fill="#7D6608" font-family="Arial, sans-serif" font-size="11" font-weight="bold">权限检查 (内联)</text>
+  <text x="190" y="339" text-anchor="middle" fill="#2C3E50" font-family="Arial, sans-serif" font-size="9">permission.py · 3级管道</text>
+
+  <!-- Arrow down -->
+  <line x1="190" y1="347" x2="190" y2="370" stroke="#4A90D9" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- 工具执行 -->
+  <rect x="110" y="375" width="160" height="42" rx="5" fill="#D4E6F1" stroke="#5DADE2" filter="url(#shadow)"/>
+  <text x="190" y="393" text-anchor="middle" fill="#1A5276" font-family="Arial, sans-serif" font-size="11" font-weight="bold">工具执行</text>
+  <text x="190" y="409" text-anchor="middle" fill="#2C3E50" font-family="Arial, sans-serif" font-size="9">TOOL_HANDLERS · tools.py</text>
+
+  <!-- Return arrow -->
+  <line x1="190" y1="417" x2="190" y2="440" stroke="#4A90D9" stroke-width="2"/>
+  <line x1="190" y1="440" x2="660" y2="440" stroke="#4A90D9" stroke-width="1.5" stroke-dasharray="5,3"/>
+  <line x1="660" y1="440" x2="660" y2="153" stroke="#4A90D9" stroke-width="1.5" stroke-dasharray="5,3"/>
+  <line x1="660" y1="153" x2="505" y2="153" stroke="#4A90D9" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#arrow)"/>
+  <text x="500" y="455" text-anchor="end" fill="#7F8C8D" font-family="Arial, sans-serif" font-size="9">tool_result → 回到 LLM</text>
+
+  <!-- Bottom: supporting modules -->
+  <rect x="40" y="465" width="200" height="55" rx="5" fill="#F2F3F4" stroke="#ABB2B9" filter="url(#shadow)"/>
+  <text x="140" y="485" text-anchor="middle" fill="#2C3E50" font-family="Arial, sans-serif" font-size="11" font-weight="bold">Anthropic() 客户端</text>
+  <text x="140" y="502" text-anchor="middle" fill="#7F8C8D" font-family="Arial, sans-serif" font-size="9">内联初始化 · 重复</text>
+
+  <rect x="260" y="465" width="200" height="55" rx="5" fill="#F2F3F4" stroke="#ABB2B9" filter="url(#shadow)"/>
+  <text x="360" y="485" text-anchor="middle" fill="#2C3E50" font-family="Arial, sans-serif" font-size="11" font-weight="bold">System Prompt</text>
+  <text x="360" y="502" text-anchor="middle" fill="#7F8C8D" font-family="Arial, sans-serif" font-size="9">硬编码字符串</text>
+
+  <rect x="480" y="465" width="200" height="55" rx="5" fill="#F2F3F4" stroke="#ABB2B9" filter="url(#shadow)"/>
+  <text x="580" y="485" text-anchor="middle" fill="#2C3E50" font-family="Arial, sans-serif" font-size="11" font-weight="bold">REPL 交互循环</text>
+  <text x="580" y="502" text-anchor="middle" fill="#7F8C8D" font-family="Arial, sans-serif" font-size="9">input() 循环</text>
+
+  <!-- Legend -->
+  <rect x="40" y="535" width="720" height="50" rx="5" fill="#F8F9FA" stroke="#E5E7E9"/>
+  <rect x="60" y="547" width="12" height="12" rx="2" fill="#D5F5E3" stroke="#82E0AA"/>
+  <text x="78" y="557" fill="#7F8C8D" font-family="Arial, sans-serif" font-size="10">工具执行</text>
+  <rect x="160" y="547" width="12" height="12" rx="2" fill="#FCF3CF" stroke="#F1C40F"/>
+  <text x="178" y="557" fill="#7F8C8D" font-family="Arial, sans-serif" font-size="10">权限检查</text>
+  <rect x="260" y="547" width="12" height="12" rx="2" fill="#FDEBD0" stroke="#F0B27A"/>
+  <text x="278" y="557" fill="#7F8C8D" font-family="Arial, sans-serif" font-size="10">条件分支</text>
+  <rect x="360" y="547" width="12" height="12" rx="2" fill="#D4E6F1" stroke="#5DADE2"/>
+  <text x="378" y="557" fill="#7F8C8D" font-family="Arial, sans-serif" font-size="10">LLM/API</text>
+  <rect x="460" y="547" width="12" height="12" rx="2" fill="#FADBD8" stroke="#F1948A"/>
+  <text x="478" y="557" fill="#7F8C8D" font-family="Arial, sans-serif" font-size="10">终止</text>
+  <line x1="560" y1="553" x2="600" y2="553" stroke="#4A90D9" stroke-width="1.5" stroke-dasharray="5,3"/>
+  <text x="608" y="557" fill="#7F8C8D" font-family="Arial, sans-serif" font-size="10">循环回传</text>
+</svg>

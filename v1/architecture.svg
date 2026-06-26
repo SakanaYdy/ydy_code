@@ -78,10 +78,10 @@
 
   <!-- Return arrow -->
   <line x1="190" y1="417" x2="190" y2="440" stroke="#4A90D9" stroke-width="2"/>
-  <line x1="190" y1="440" x2="660" y2="440" stroke="#4A90D9" stroke-width="1.5" stroke-dasharray="5,3"/>
-  <line x1="660" y1="440" x2="660" y2="153" stroke="#4A90D9" stroke-width="1.5" stroke-dasharray="5,3"/>
-  <line x1="660" y1="153" x2="505" y2="153" stroke="#4A90D9" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#arrow)"/>
-  <text x="500" y="455" text-anchor="end" fill="#7F8C8D" font-family="Arial, sans-serif" font-size="9">tool_result → 回到 LLM</text>
+  <line x1="190" y1="440" x2="680" y2="440" stroke="#4A90D9" stroke-width="1.5" stroke-dasharray="5,3"/>
+  <line x1="680" y1="440" x2="680" y2="153" stroke="#4A90D9" stroke-width="1.5" stroke-dasharray="5,3"/>
+  <line x1="680" y1="153" x2="505" y2="153" stroke="#4A90D9" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#arrow)"/>
+  <text x="680" y="455" text-anchor="middle" fill="#7F8C8D" font-family="Arial, sans-serif" font-size="9">tool_result → 回到 LLM</text>
 
   <!-- Bottom: supporting modules -->
   <rect x="40" y="465" width="200" height="55" rx="5" fill="#F2F3F4" stroke="#ABB2B9" filter="url(#shadow)"/>
